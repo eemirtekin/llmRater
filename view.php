@@ -2,6 +2,7 @@
 require_once "../config.php";
 require_once "lib/DbHelper.php";
 require_once "lib/GeminiRater.php";
+require_once "lib/Parsedown.php";  // Include Parsedown
 
 use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Settings;
@@ -60,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['evaluate'])) {
 
 // Start the page
 $OUTPUT->header();
+?>
+<link rel="stylesheet" href="css/custom.css?v=<?php echo filemtime(__DIR__ . '/css/custom.css'); ?>">
+<?php
 $OUTPUT->bodyStart();
 
 $menu = new \Tsugi\UI\MenuSet();
@@ -72,19 +76,33 @@ $OUTPUT->flashMessages();
     <h2>Student Response</h2>
     <div class="card mb-4">
         <div class="card-header">
-            <strong>Student:</strong> <?= htmlspecialchars($response['displayname']) ?>
+            <strong>Student:</strong> <?= htmlspecialchars($response['displayname'] ?? '') ?>
             <br>
-            <strong>Submitted:</strong> <?= htmlspecialchars($response['submitted_at']) ?>
+            <strong>Question:</strong> <?= htmlspecialchars($response['title'] ?? '') ?>
+            <br>
+            <strong>Submitted:</strong> <?= htmlspecialchars($response['submitted_at'] ?? '') ?>
         </div>
         <div class="card-body">
             <h5>Question:</h5>
-            <div class="mb-4">
-                <?= htmlspecialchars($response['question']) ?>
+            <div class="markdown-content mb-4">
+                <?php 
+                    $parsedown = new Parsedown();
+                    // Clean HTML tags and process markdown
+                    $cleanQuestion = strip_tags($response['question']);
+                    // Remove unnecessary spaces at the beginning of lines
+                    $cleanQuestion = implode("\n", array_map('trim', explode("\n", $cleanQuestion)));
+                    echo $parsedown->text($cleanQuestion); 
+                ?>
             </div>
 
             <h5>Evaluation Criteria:</h5>
-            <div class="mb-4">
-                <?= htmlspecialchars($response['prompt']) ?>
+            <div class="markdown-content mb-4">
+                <?php 
+                    $parsedown = new Parsedown();
+                    // Remove HTML tags and process markdown
+                    $cleanPrompt = strip_tags($response['prompt']);
+                    echo $parsedown->text($cleanPrompt);
+                ?>
             </div>
 
             <h5>Answer:</h5>
@@ -95,28 +113,22 @@ $OUTPUT->flashMessages();
             <?php if (isset($response['evaluation_text'])): ?>
                 <h5>LLM Evaluation:</h5>
                 <div class="mb-4">
-                    <pre class="evaluation-result"><?= htmlspecialchars($response['evaluation_text']) ?></pre>
-                    <small class="text-muted">Evaluated on: <?= htmlspecialchars($response['evaluated_at']) ?></small>
+                    <?= nl2br(htmlspecialchars($response['evaluation_text'])) ?>
+                    <br>
+                    <small class="text-muted">Evaluated on: <?= htmlspecialchars($response['evaluated_at'] ?? '') ?></small>
                 </div>
             <?php endif; ?>
 
-            <form method="post" class="mt-4">
-                <button type="submit" name="evaluate" class="btn btn-primary">
-                    <?= isset($response['evaluation_text']) ? 'Re-evaluate' : 'Evaluate' ?> Response
-                </button>
-            </form>
+            <div class="mt-4">
+                <form method="post">
+                    <button type="submit" name="evaluate" class="btn btn-primary">
+                        <?= isset($response['evaluation_text']) ? 'Re-evaluate' : 'Evaluate' ?> Response
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
-
-<style>
-.evaluation-result {
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-radius: 4px;
-    white-space: pre-wrap;
-}
-</style>
 
 <?php
 $OUTPUT->footerStart();

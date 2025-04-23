@@ -14,60 +14,63 @@ if (!$LAUNCH->user->instructor) {
 // Initialize database helper
 $db = new DbHelper($PDOX, $CFG->dbprefix);
 
-// Get current question
-$question = $db->getQuestion($LAUNCH->link->id);
+// Get question ID from URL
+$question_id = isset($_GET['question_id']) ? intval($_GET['question_id']) : 0;
+if (!$question_id) {
+    $_SESSION['error'] = 'Question ID is required for export';
+    header('Location: ' . addSession('index.php'));
+    return;
+}
+
+// Get question details
+$question = $db->getQuestionById($question_id);
 if (!$question) {
-    $_SESSION['error'] = 'No question found';
+    $_SESSION['error'] = 'Question not found';
     header('Location: ' . addSession('index.php'));
     return;
 }
 
 // Get all responses with evaluations
-$responses = $db->getAllResponsesForExport($question['question_id']);
+$responses = $db->getAllResponsesForExport($question_id);
 if (empty($responses)) {
     $_SESSION['error'] = 'No data available for export';
-    header('Location: ' . addSession('index.php'));
+    header('Location: ' . addSession('index.php?question_id=' . $question_id));
     return;
 }
 
 // Set headers for CSV download
+$filename = 'responses_' . $question_id . '_' . date('Y-m-d_His') . '.csv';
 header('Content-Type: text/csv; charset=utf-8');
-header('Content-Disposition: attachment; filename="responses_' . date('Y-m-d') . '.csv"');
+header('Content-Disposition: attachment; filename=' . $filename);
 
-// Create CSV file
+// Create output handle
 $output = fopen('php://output', 'w');
 
 // Add UTF-8 BOM for Excel
 fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
 
-// Write headers
+// Write CSV header
 fputcsv($output, [
-    'Student ID',
-    'Student Name',
-    'Student Email',
-    'Submission Date',
+    'Student',
+    'Email',
     'Question',
-    'Evaluation Criteria',
     'Answer',
-    'LLM Evaluation',
-    'Evaluation Date'
+    'Submitted At',
+    'Evaluation',
+    'Evaluated At'
 ]);
 
-// Write data
+// Write data rows
 foreach ($responses as $response) {
-    $row = [
-        $response['user_id'],
-        $response['displayname'],
-        $response['email'],
-        $response['submitted_at'],
+    fputcsv($output, [
+        $response['displayname'] ?? 'Unknown',
+        $response['email'] ?? '',
         $response['question'],
-        $response['prompt'],
         $response['answer'],
-        $response['evaluation_text'] ?? 'Not evaluated',
-        $response['evaluated_at'] ?? 'N/A'
-    ];
-    
-    fputcsv($output, $row);
+        $response['submitted_at'],
+        $response['evaluation_text'] ?? '',
+        $response['evaluated_at'] ?? ''
+    ]);
 }
 
 fclose($output);

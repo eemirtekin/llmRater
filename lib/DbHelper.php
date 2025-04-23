@@ -15,8 +15,10 @@ class DbHelper {
         $sql = "CREATE TABLE IF NOT EXISTS {$this->p}llm_questions (
             question_id INT AUTO_INCREMENT PRIMARY KEY,
             link_id INT NOT NULL,
+            title VARCHAR(255) NOT NULL,
             question TEXT NOT NULL,
             prompt TEXT NOT NULL,
+            attempt_limit INT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (link_id) REFERENCES {$this->p}lti_link(link_id)
@@ -44,20 +46,61 @@ class DbHelper {
             FOREIGN KEY (response_id) REFERENCES {$this->p}llm_responses(response_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
         $this->PDOX->queryDie($sql);
+
+        // Run migrations after creating tables
+        $this->migrateDatabase();
     }
 
-    public function saveQuestion($linkId, $question, $prompt) {
+    public function migrateDatabase() {
+        // Check if title column exists in llm_questions table
+        $sql = "SELECT COUNT(*) as count 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = '{$this->p}llm_questions' 
+                AND column_name = 'title'";
+        
+        $result = $this->PDOX->rowDie($sql);
+        
+        if ($result['count'] == 0) {
+            // Add title column if it doesn't exist
+            $sql = "ALTER TABLE {$this->p}llm_questions 
+                    ADD COLUMN title VARCHAR(255) DEFAULT 'Untitled Question' NOT NULL AFTER link_id";
+            $this->PDOX->queryDie($sql);
+
+            // Set default titles for existing questions
+            $sql = "UPDATE {$this->p}llm_questions 
+                    SET title = CONCAT('Question #', question_id)";
+            $this->PDOX->queryDie($sql);
+        }
+
+        // Check if attempt_limit column exists
+        $sql = "SELECT COUNT(*) as count 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = '{$this->p}llm_questions' 
+                AND column_name = 'attempt_limit'";
+        
+        $result = $this->PDOX->rowDie($sql);
+        
+        if ($result['count'] == 0) {
+            // Add attempt_limit column if it doesn't exist
+            $sql = "ALTER TABLE {$this->p}llm_questions 
+                    ADD COLUMN attempt_limit INT DEFAULT NULL AFTER prompt";
+            $this->PDOX->queryDie($sql);
+        }
+    }
+
+    public function saveQuestion($linkId, $title, $question, $prompt, $attemptLimit = null) {
         $sql = "INSERT INTO {$this->p}llm_questions 
-                (link_id, question, prompt) 
-                VALUES (:lid, :q, :p)
-                ON DUPLICATE KEY UPDATE
-                question = VALUES(question),
-                prompt = VALUES(prompt)";
+                (link_id, title, question, prompt, attempt_limit) 
+                VALUES (:lid, :title, :q, :p, :limit)";
         
         $values = array(
             ':lid' => $linkId,
+            ':title' => $title,
             ':q' => $question,
-            ':p' => $prompt
+            ':p' => $prompt,
+            ':limit' => $attemptLimit
         );
         
         $this->PDOX->queryDie($sql, $values);
@@ -70,6 +113,21 @@ class DbHelper {
                 ORDER BY question_id DESC LIMIT 1";
         
         return $this->PDOX->rowDie($sql, array(':lid' => $linkId));
+    }
+
+    public function getAllQuestions($linkId) {
+        $sql = "SELECT * FROM {$this->p}llm_questions 
+                WHERE link_id = :lid 
+                ORDER BY created_at DESC";
+        
+        return $this->PDOX->allRowsDie($sql, array(':lid' => $linkId));
+    }
+
+    public function getQuestionById($questionId) {
+        $sql = "SELECT * FROM {$this->p}llm_questions 
+                WHERE question_id = :qid";
+        
+        return $this->PDOX->rowDie($sql, array(':qid' => $questionId));
     }
 
     public function saveResponse($questionId, $userId, $answer) {
@@ -88,13 +146,46 @@ class DbHelper {
     }
 
     public function getResponses($questionId) {
-        $sql = "SELECT r.*, u.displayname, u.email 
+        $sql = "SELECT r.*, 
+                       u.displayname, u.email, u.user_id,
+                       p.profile_id, p.displayname AS profile_displayname, p.email AS profile_email,
+                       p.json AS profile_json
                 FROM {$this->p}llm_responses r
                 JOIN {$this->p}lti_user u ON r.user_id = u.user_id
+                LEFT JOIN {$this->p}profile p ON u.profile_id = p.profile_id
                 WHERE r.question_id = :qid
                 ORDER BY r.submitted_at DESC";
         
-        return $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
+        $responses = $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
+        
+        // Process the responses to ensure displayname is set correctly
+        foreach ($responses as &$response) {
+            // If displayname is empty, try to use profile_displayname
+            if (empty($response['displayname']) && !empty($response['profile_displayname'])) {
+                $response['displayname'] = $response['profile_displayname'];
+            }
+            
+            // If still empty, check if we have JSON profile data
+            if (empty($response['displayname']) && !empty($response['profile_json'])) {
+                $profile = json_decode($response['profile_json'], true);
+                if (!empty($profile['name'])) {
+                    $response['displayname'] = $profile['name'];
+                }
+            }
+            
+            // Fallback to email if all else fails
+            if (empty($response['displayname']) && !empty($response['email'])) {
+                // Use email but remove @domain.com part
+                $response['displayname'] = strstr($response['email'], '@', true);
+            }
+            
+            // If still nothing, use a generic name
+            if (empty($response['displayname'])) {
+                $response['displayname'] = 'Student ' . $response['user_id'];
+            }
+        }
+        
+        return $responses;
     }
 
     public function saveEvaluation($responseId, $evaluationText) {
@@ -119,16 +210,21 @@ class DbHelper {
         return $this->PDOX->rowDie($sql, array(':rid' => $responseId));
     }
 
-    public function getResponseDetails($responseId) {
-        $sql = "SELECT r.*, q.question, q.prompt, e.evaluation_text, e.evaluated_at,
-                       u.displayname, u.email
-                FROM {$this->p}llm_responses r
-                JOIN {$this->p}llm_questions q ON r.question_id = q.question_id
-                JOIN {$this->p}lti_user u ON r.user_id = u.user_id
-                LEFT JOIN {$this->p}llm_evaluations e ON r.response_id = e.response_id
-                WHERE r.response_id = :rid";
-        
-        return $this->PDOX->rowDie($sql, array(':rid' => $responseId));
+    public function getResponseDetails($response_id) {
+        $stmt = $this->PDOX->queryDie(
+            "SELECT r.*, u.displayname, q.question, q.prompt, q.title, e.evaluation_text, e.evaluated_at 
+            FROM {$this->p}llm_responses r
+            JOIN {$this->p}lti_user u ON r.user_id = u.user_id
+            JOIN {$this->p}llm_questions q ON r.question_id = q.question_id
+            LEFT JOIN {$this->p}llm_evaluations e ON r.response_id = e.response_id
+            WHERE r.response_id = :rid",
+            array(':rid' => $response_id)
+        );
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if ($row) {
+            $row['question'] = strip_tags($row['question']);
+        }
+        return $row;
     }
 
     public function getAllResponsesForExport($questionId) {
@@ -142,5 +238,65 @@ class DbHelper {
                 ORDER BY r.submitted_at DESC";
         
         return $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
+    }
+
+    public function updateQuestion($questionId, $title, $question, $prompt, $attemptLimit = null) {
+        $sql = "UPDATE {$this->p}llm_questions 
+                SET question = :q, prompt = :p, title = :title, attempt_limit = :limit 
+                WHERE question_id = :qid";
+        
+        $values = array(
+            ':qid' => $questionId,
+            ':q' => $question,
+            ':p' => $prompt,
+            ':title' => $title,
+            ':limit' => $attemptLimit
+        );
+        
+        return $this->PDOX->queryDie($sql, $values);
+    }
+
+    public function deleteQuestion($questionId) {
+        // First delete all evaluations related to responses for this question
+        $sql = "DELETE e FROM {$this->p}llm_evaluations e
+                INNER JOIN {$this->p}llm_responses r ON e.response_id = r.response_id
+                WHERE r.question_id = :qid";
+        $this->PDOX->queryDie($sql, array(':qid' => $questionId));
+        
+        // Then delete all responses for this question
+        $sql = "DELETE FROM {$this->p}llm_responses WHERE question_id = :qid";
+        $this->PDOX->queryDie($sql, array(':qid' => $questionId));
+        
+        // Finally delete the question itself
+        $sql = "DELETE FROM {$this->p}llm_questions WHERE question_id = :qid";
+        return $this->PDOX->queryDie($sql, array(':qid' => $questionId));
+    }
+
+    public function getAttemptCount($questionId, $userId) {
+        $sql = "SELECT COUNT(*) as count 
+                FROM {$this->p}llm_responses 
+                WHERE question_id = :qid AND user_id = :uid";
+        
+        $result = $this->PDOX->rowDie($sql, array(
+            ':qid' => $questionId,
+            ':uid' => $userId
+        ));
+        
+        return $result['count'];
+    }
+
+    public function canSubmitResponse($questionId, $userId) {
+        $question = $this->getQuestionById($questionId);
+        if (!$question) {
+            return false;
+        }
+        
+        // If no attempt limit is set, always allow submission
+        if ($question['attempt_limit'] === null) {
+            return true;
+        }
+        
+        $attempts = $this->getAttemptCount($questionId, $userId);
+        return $attempts < $question['attempt_limit'];
     }
 }
