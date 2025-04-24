@@ -280,7 +280,7 @@ class DbHelper {
 
     public function getResponseDetails($response_id) {
         $stmt = $this->PDOX->queryDie(
-            "SELECT r.*, u.displayname, q.question, q.prompt, q.additional_prompt, q.title, r.evaluation_text, r.evaluated_at 
+            "SELECT r.*, r.question_id, u.displayname, q.question, q.prompt, q.additional_prompt, q.title, r.evaluation_text, r.evaluated_at 
             FROM {$this->p}llm_responses r
             JOIN {$this->p}lti_user u ON r.user_id = u.user_id
             JOIN {$this->p}llm_questions q ON r.question_id = q.question_id

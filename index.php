@@ -27,11 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['success'] = 'Question deleted';
             header('Location: ' . addSession('index.php'));
             return;
-        } else if (isset($_POST['delete_all_evaluations'])) {
-            $db->deleteAllEvaluationsForQuestion($selected_question['question_id']);
-            $_SESSION['success'] = 'All evaluations for this question have been deleted';
-            header('Location: ' . addSession('index.php?question_id=' . $selected_question['question_id']));
-            return;
         } else if (isset($_POST['title']) && isset($_POST['question']) && isset($_POST['prompt']) && !isset($_POST['question_id'])) {
             $attemptLimit = !empty($_POST['attempt_limit']) ? intval($_POST['attempt_limit']) : null;
             $additionalPrompt = $_POST['additional_prompt'] ?? null;
@@ -74,6 +69,14 @@ if (isset($_GET['question_id'])) {
     $selected_question = $db->getQuestionById($_GET['question_id']);
     if ($selected_question) {
         $responses = $db->getResponses($selected_question['question_id']);
+        
+        // Handle delete_all_evaluations after we have the selected_question
+        if ($LAUNCH->user->instructor && isset($_POST['delete_all_evaluations'])) {
+            $db->deleteAllEvaluationsForQuestion($selected_question['question_id']);
+            $_SESSION['success'] = 'All evaluations for this question have been deleted';
+            header('Location: ' . addSession('index.php?question_id=' . $selected_question['question_id']));
+            return;
+        }
     }
 }
 

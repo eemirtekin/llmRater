@@ -67,6 +67,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return;
         }
     } elseif (isset($_POST['delete_all_evaluations'])) {
+        // Ensure we have the question_id from the response
+        if (!isset($response['question_id'])) {
+            $_SESSION['error'] = 'Question ID not found';
+            header('Location: ' . addSession('view.php?response_id=' . $response_id));
+            return;
+        }
         // Delete all evaluations for this question
         $db->deleteAllEvaluationsForQuestion($response['question_id']);
         $_SESSION['success'] = 'All evaluations for this question have been deleted';
