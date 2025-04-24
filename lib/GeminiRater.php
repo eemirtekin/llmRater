@@ -13,16 +13,17 @@ class GeminiRater {
     public function evaluate($question, $answer, $prompt, $additionalPrompt = null) {
         $url = "{$this->baseUrl}/{$this->model}:generateContent?key={$this->apiKey}";
         
-        // Construct the evaluation prompt
-        $systemPrompt = "You are an educational assessment assistant. Your task is to evaluate a student's answer based on the given criteria.\n\n";
-        $context = "Question: {$question}\n\nStudent Answer: {$answer}\n\nEvaluation Criteria:\n{$prompt}";
+        // Build the prompt with clear sections
+        $systemPrompt = "You are an educational assessment assistant evaluating a student's answer.\n\n";
+        $context = sprintf(
+            "Question:\n%s\n\nStudent Answer:\n%s\n\nEvaluation Criteria:\n%s%s",
+            trim($question),
+            trim($answer),
+            trim($prompt),
+            $additionalPrompt ? "\n\nAdditional Instructions:\n" . trim($additionalPrompt) : ""
+        );
         
-        // Add additional prompt if provided
-        if ($additionalPrompt) {
-            $context .= "\n\nAdditional Instructions:\n{$additionalPrompt}";
-        }
-        
-        $task = "\n\nPlease evaluate the student's answer based on the given criteria. Provide a structured response with scoring and detailed feedback.";
+        $task = "\n\nProvide a structured evaluation with clear scoring and detailed feedback.";
 
         $data = [
             "contents" => [
@@ -31,37 +32,45 @@ class GeminiRater {
                         ["text" => $systemPrompt . $context . $task]
                     ]
                 ]
+            ],
+            "generationConfig" => [
+                "temperature" => 0.7,
+                "topK" => 40,
+                "topP" => 0.95,
+                "maxOutputTokens" => 1024,
             ]
         ];
 
+        // Set up curl with connection timeout
         $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json'
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($data),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true,
         ]);
 
-        // Get HTTP response code
-        curl_setopt($ch, CURLOPT_HEADER, true);
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $body = substr($response, $headerSize);
-        
         $error = curl_error($ch);
         curl_close($ch);
 
         if ($error) {
-            throw new \Exception("API Error: " . $error);
+            throw new \Exception("API Connection Error: " . $error);
         }
 
         if ($httpCode !== 200) {
-            throw new \Exception("API returned error code: " . $httpCode);
+            $errorData = json_decode($response, true);
+            $errorMessage = isset($errorData['error']['message']) ? 
+                $errorData['error']['message'] : 
+                "API returned error code: " . $httpCode;
+            throw new \Exception($errorMessage);
         }
 
-        $result = json_decode($body, true);
-        return $this->parseResponse($result);
+        return $this->parseResponse(json_decode($response, true));
     }
 
     public function evaluateBatch($responses, $batchSize = 5) {
@@ -69,7 +78,6 @@ class GeminiRater {
         $batches = array_chunk($responses, $batchSize);
         
         foreach ($batches as $batch) {
-            $promises = [];
             foreach ($batch as $response) {
                 try {
                     $result = $this->evaluate(
@@ -80,10 +88,15 @@ class GeminiRater {
                     );
                     $results[$response['response_id']] = $result;
                 } catch (\Exception $e) {
-                    // Log error but continue with other evaluations
-                    error_log("Error evaluating response {$response['response_id']}: " . $e->getMessage());
+                    error_log(sprintf(
+                        "Error evaluating response %d: %s",
+                        $response['response_id'],
+                        $e->getMessage()
+                    ));
                     continue;
                 }
+                // Add a small delay between requests to avoid rate limiting
+                usleep(200000); // 200ms delay
             }
         }
         
@@ -96,24 +109,17 @@ class GeminiRater {
         }
 
         if (isset($result['error'])) {
-            throw new \Exception("API Error: " . $result['error']['message'] ?? 'Unknown error');
-        }
-
-        if (!isset($result['candidates']) || empty($result['candidates'])) {
-            throw new \Exception("No response candidates returned from API");
-        }
-
-        if (!isset($result['candidates'][0]['content']) || !isset($result['candidates'][0]['content']['parts'])) {
-            throw new \Exception("Invalid response format: missing content or parts");
+            throw new \Exception("API Error: " . ($result['error']['message'] ?? 'Unknown error'));
         }
 
         if (!isset($result['candidates'][0]['content']['parts'][0]['text'])) {
-            throw new \Exception("Invalid API response format: missing text");
+            throw new \Exception("Invalid API response format: missing content");
         }
 
         return [
             'raw_response' => $result['candidates'][0]['content']['parts'][0]['text'],
-            'timestamp' => time()
+            'timestamp' => time(),
+            'model' => $this->model
         ];
     }
 }

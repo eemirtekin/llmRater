@@ -2,7 +2,7 @@
 require_once "../config.php";
 require_once "lib/DbHelper.php";
 require_once "lib/GeminiRater.php";
-require_once "lib/Parsedown.php";  // Include Parsedown
+require_once "lib/Parsedown.php";
 
 use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Settings;
@@ -14,17 +14,15 @@ if (!$LAUNCH->user->instructor) {
     die('Instructor role required');
 }
 
-$response_id = isset($_GET['response_id']) ? intval($_GET['response_id']) : 0;
+$response_id = filter_input(INPUT_GET, 'response_id', FILTER_VALIDATE_INT);
 if (!$response_id) {
     $_SESSION['error'] = 'Invalid response ID';
     header('Location: ' . addSession('index.php'));
     return;
 }
 
-// Initialize database helper
+// Initialize database helper and get response details
 $db = new DbHelper($PDOX, $CFG->dbprefix);
-
-// Get response details including question, student info, and evaluation
 $response = $db->getResponseDetails($response_id);
 if (!$response) {
     $_SESSION['error'] = 'Response not found';
@@ -39,12 +37,9 @@ $adjacent = $db->getAdjacentResponses($response_id);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['evaluate'])) {
         try {
-            // Get API key from settings
             $apiKey = Settings::linkGet('gemini_api_key');
             if (!$apiKey) {
-                $_SESSION['error'] = 'Gemini API key not configured';
-                header('Location: ' . addSession('view.php?response_id=' . $response_id));
-                return;
+                throw new Exception('Gemini API key not configured');
             }
 
             $rater = new GeminiRater($apiKey);
@@ -55,47 +50,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $response['additional_prompt'] ?? null
             );
 
-            // Store evaluation result
             $db->saveEvaluation($response_id, $evaluation['raw_response']);
-
             $_SESSION['success'] = 'Evaluation completed successfully';
-            header('Location: ' . addSession('view.php?response_id=' . $response_id));
-            return;
         } catch (Exception $e) {
             $_SESSION['error'] = 'Evaluation failed: ' . $e->getMessage();
-            header('Location: ' . addSession('view.php?response_id=' . $response_id));
-            return;
         }
-    } elseif (isset($_POST['delete_all_evaluations'])) {
-        // Ensure we have the question_id from the response
-        if (!isset($response['question_id'])) {
-            $_SESSION['error'] = 'Question ID not found';
-            header('Location: ' . addSession('view.php?response_id=' . $response_id));
-            return;
-        }
-        // Delete all evaluations for this question
-        $db->deleteAllEvaluationsForQuestion($response['question_id']);
-        $_SESSION['success'] = 'All evaluations for this question have been deleted';
         header('Location: ' . addSession('view.php?response_id=' . $response_id));
         return;
     }
 }
 
-// Start the page
+// Initialize Markdown parser
+$parsedown = new Parsedown();
+
+// Start output
 $OUTPUT->header();
 ?>
-<link rel="stylesheet" href="css/custom.css?v=<?php echo filemtime(__DIR__ . '/css/custom.css'); ?>">
-<style>
-.navigation-buttons {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-.navigation-buttons .btn {
-    min-width: 100px;
-}
-</style>
+<link rel="stylesheet" href="css/custom.css?v=<?= filemtime(__DIR__ . '/css/custom.css') ?>">
 <?php
 $OUTPUT->bodyStart();
 
@@ -106,73 +77,92 @@ $OUTPUT->flashMessages();
 ?>
 
 <div class="container">
-    <h2 class="mb-3">Student Response</h2>
-
     <div class="card mb-4">
-        <div class="card-header">
-            <strong>Student:</strong> <?= htmlspecialchars($response['displayname'] ?? '') ?>
-            <br>
-            <strong>Question:</strong> <?= htmlspecialchars($response['title'] ?? '') ?>
-            <br>
-            <strong>Submitted:</strong> <?= htmlspecialchars($response['submitted_at'] ?? '') ?>
+        <div class="card-header d-flex justify-content-between align-items-start flex-wrap">
+            <div>
+                <h4 class="mb-2"><?= htmlspecialchars($response['title'] ?? '') ?></h4>
+            </div>
         </div>
         <div class="card-body">
-            <h5>Question:</h5>
-            <div class="markdown-content mb-4">
-                <?php 
-                    $parsedown = new Parsedown();
-                    // Clean HTML tags and process markdown
-                    $cleanQuestion = strip_tags($response['question']);
-                    // Remove unnecessary spaces at the beginning of lines
-                    $cleanQuestion = implode("\n", array_map('trim', explode("\n", $cleanQuestion)));
-                    echo $parsedown->text($cleanQuestion); 
-                ?>
+            <div class="question-box">
+                <div class="question-metadata">
+                    <strong>Student:</strong> <?= htmlspecialchars($response['displayname'] ?? '') ?><br>
+                    <strong>Submitted:</strong> <?= htmlspecialchars($response['submitted_at'] ?? '') ?>
+                </div>
+                <h5>Question:</h5>
+                <div class="markdown-content">
+                    <?= $parsedown->text(trim(strip_tags($response['question']))) ?>
+                </div>
             </div>
 
             <h5>Evaluation Criteria:</h5>
             <div class="markdown-content mb-4">
-                <?php 
-                    $parsedown = new Parsedown();
-                    // Remove HTML tags and process markdown
-                    $cleanPrompt = strip_tags($response['prompt']);
-                    echo $parsedown->text($cleanPrompt);
-                ?>
+                <?= $parsedown->text(trim(strip_tags($response['prompt']))) ?>
             </div>
 
             <h5>Answer:</h5>
             <div class="mb-4">
-                <?= htmlspecialchars($response['answer']) ?>
+                <pre class="p-3 bg-light border rounded"><?= htmlspecialchars($response['answer']) ?></pre>
             </div>
 
             <?php if (isset($response['evaluation_text'])): ?>
                 <h5>LLM Evaluation:</h5>
                 <div class="evaluation-box">
                     <pre><?= htmlspecialchars($response['evaluation_text']) ?></pre>
-                    <small class="text-muted mt-2 d-block">Evaluated on: <?= htmlspecialchars($response['evaluated_at'] ?? '') ?></small>
+                    <?php if (isset($response['evaluated_at'])): ?>
+                        <small class="text-muted mt-2 d-block">Evaluated on: <?= htmlspecialchars($response['evaluated_at']) ?></small>
+                    <?php endif; ?>
+                    <form method="post" class="mt-2">
+                        <button type="submit" name="evaluate" value="1" class="btn btn-sm btn-outline-secondary">
+                            Re-evaluate
+                        </button>
+                    </form>
                 </div>
+            <?php else: ?>
+                <form method="post">
+                    <button type="submit" name="evaluate" value="1" class="btn btn-sm btn-primary">
+                        Evaluate Response
+                    </button>
+                </form>
             <?php endif; ?>
 
             <?php 
             $apiKey = Settings::linkGet('gemini_api_key');
             if (!$apiKey): ?>
                 <div class="alert alert-warning">
-                    Gemini API key is not configured. Please configure it in the settings before evaluating responses.
+                    <i class="fas fa-exclamation-triangle"></i> Gemini API key is not configured. Please configure it in the settings.
                 </div>
             <?php endif; ?>
-            <div class="mt-4">
-                <form method="post">
-                    <button type="submit" name="evaluate" value="1" class="btn btn-primary">
-                        <?= isset($response['evaluation_text']) ? 'Re-evaluate' : 'Evaluate' ?> Response
-                    </button>
-                </form>
-            </div>
         </div>
+    </div>
+
+    <div class="btn-group mb-4">
+        <button class="btn btn-primary" data-toggle="modal" data-target="#editQuestionModal">
+            <i class="fas fa-edit"></i> Edit Question
+        </button>
+        <?php if (count($responses) > 0): ?>
+            <a href="export.php?question_id=<?= $selected_question['question_id'] ?>" class="btn btn-secondary">
+                <i class="fas fa-file-export"></i> Export
+            </a>
+            <form method="post" style="display: inline;">
+                <input type="hidden" name="evaluate_all" value="1">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check-circle"></i> Evaluate All
+                </button>
+            </form>
+            <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#deleteAllEvaluationsModal">
+                <i class="fas fa-trash-alt"></i> Clear Evaluations
+            </button>
+        <?php endif; ?>
+        <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteQuestionModal">
+            <i class="fas fa-times-circle"></i> Delete
+        </button>
     </div>
 
     <div class="navigation-buttons">
         <?php if ($adjacent && $adjacent['prev_id']): ?>
             <a href="?response_id=<?= $adjacent['prev_id'] ?>" class="btn btn-primary">
-                <i class="fas fa-chevron-left"></i> Previous
+                <i class="fas fa-chevron-left"></i> Previous Response
             </a>
         <?php else: ?>
             <div></div>
@@ -180,7 +170,7 @@ $OUTPUT->flashMessages();
 
         <?php if ($adjacent && $adjacent['next_id']): ?>
             <a href="?response_id=<?= $adjacent['next_id'] ?>" class="btn btn-primary">
-                Next <i class="fas fa-chevron-right"></i>
+                Next Response <i class="fas fa-chevron-right"></i>
             </a>
         <?php else: ?>
             <div></div>

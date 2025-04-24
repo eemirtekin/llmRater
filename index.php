@@ -124,6 +124,46 @@ $OUTPUT->header();
 ?>
 <link rel="stylesheet" href="css/custom.css?v=<?php echo filemtime(__DIR__ . '/css/custom.css'); ?>">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<script>
+// LTI iframe resize handler
+function sendLTIFrameHeight() {
+    try {
+        // Get the height of the document
+        const height = Math.max(
+            document.documentElement.clientHeight,
+            document.documentElement.scrollHeight,
+            document.documentElement.offsetHeight
+        );
+        
+        // Send message to parent window
+        if (window.parent && window.parent !== window) {
+            const message = {
+                subject: 'lti.frameResize',
+                height: height
+            };
+            window.parent.postMessage(JSON.stringify(message), '*');
+        }
+    } catch (e) {
+        console.error('Error sending frame height:', e);
+    }
+}
+
+// Call on page load and after any dynamic content changes
+window.addEventListener('load', sendLTIFrameHeight);
+window.addEventListener('resize', sendLTIFrameHeight);
+
+// Call when modals are shown/hidden
+document.addEventListener('DOMContentLoaded', function() {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.addEventListener('shown.bs.modal', sendLTIFrameHeight);
+        modal.addEventListener('hidden.bs.modal', sendLTIFrameHeight);
+    });
+});
+
+// Periodic check for dynamic content changes
+setInterval(sendLTIFrameHeight, 1000);
+</script>
 <?php
 $OUTPUT->bodyStart();
 

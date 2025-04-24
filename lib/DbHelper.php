@@ -215,45 +215,15 @@ class DbHelper {
 
     public function getResponses($questionId) {
         $sql = "SELECT r.*, 
-                       u.displayname, u.email, u.user_id,
-                       p.profile_id, p.displayname AS profile_displayname, p.email AS profile_email,
-                       p.json AS profile_json
+                       COALESCE(u.displayname, p.displayname, SUBSTRING_INDEX(COALESCE(u.email, p.email), '@', 1), CONCAT('Student ', u.user_id)) as displayname,
+                       u.email, u.user_id
                 FROM {$this->p}llm_responses r
                 JOIN {$this->p}lti_user u ON r.user_id = u.user_id
                 LEFT JOIN {$this->p}profile p ON u.profile_id = p.profile_id
                 WHERE r.question_id = :qid
                 ORDER BY r.submitted_at DESC";
         
-        $responses = $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
-        
-        // Process the responses to ensure displayname is set correctly
-        foreach ($responses as &$response) {
-            // If displayname is empty, try to use profile_displayname
-            if (empty($response['displayname']) && !empty($response['profile_displayname'])) {
-                $response['displayname'] = $response['profile_displayname'];
-            }
-            
-            // If still empty, check if we have JSON profile data
-            if (empty($response['displayname']) && !empty($response['profile_json'])) {
-                $profile = json_decode($response['profile_json'], true);
-                if (!empty($profile['name'])) {
-                    $response['displayname'] = $profile['name'];
-                }
-            }
-            
-            // Fallback to email if all else fails
-            if (empty($response['displayname']) && !empty($response['email'])) {
-                // Use email but remove @domain.com part
-                $response['displayname'] = strstr($response['email'], '@', true);
-            }
-            
-            // If still nothing, use a generic name
-            if (empty($response['displayname'])) {
-                $response['displayname'] = 'Student ' . $response['user_id'];
-            }
-        }
-        
-        return $responses;
+        return $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
     }
 
     public function saveEvaluation($responseId, $evaluationText) {
@@ -268,14 +238,6 @@ class DbHelper {
         ];
         
         return $this->PDOX->queryDie($sql, $params);
-    }
-
-    public function getEvaluation($responseId) {
-        $sql = "SELECT * FROM {$this->p}llm_evaluations 
-                WHERE response_id = :rid 
-                ORDER BY evaluated_at DESC LIMIT 1";
-        
-        return $this->PDOX->rowDie($sql, array(':rid' => $responseId));
     }
 
     public function getResponseDetails($response_id) {
