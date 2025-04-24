@@ -27,15 +27,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['success'] = 'Question deleted';
             header('Location: ' . addSession('index.php'));
             return;
+        } else if (isset($_POST['delete_all_evaluations'])) {
+            $db->deleteAllEvaluationsForQuestion($selected_question['question_id']);
+            $_SESSION['success'] = 'All evaluations for this question have been deleted';
+            header('Location: ' . addSession('index.php?question_id=' . $selected_question['question_id']));
+            return;
         } else if (isset($_POST['title']) && isset($_POST['question']) && isset($_POST['prompt']) && !isset($_POST['question_id'])) {
             $attemptLimit = !empty($_POST['attempt_limit']) ? intval($_POST['attempt_limit']) : null;
-            $db->saveQuestion($LAUNCH->link->id, $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit);
+            $additionalPrompt = $_POST['additional_prompt'] ?? null;
+            $db->saveQuestion($LAUNCH->link->id, $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit, $additionalPrompt);
             $_SESSION['success'] = 'Question saved';
             header('Location: ' . addSession('index.php'));
             return;
         } else if (isset($_POST['title']) && isset($_POST['question']) && isset($_POST['prompt']) && isset($_POST['question_id'])) {
             $attemptLimit = !empty($_POST['attempt_limit']) ? intval($_POST['attempt_limit']) : null;
-            $db->updateQuestion($_POST['question_id'], $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit);
+            $additionalPrompt = $_POST['additional_prompt'] ?? null;
+            $db->updateQuestion($_POST['question_id'], $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit, $additionalPrompt);
             $_SESSION['success'] = 'Question updated';
             header('Location: ' . addSession('index.php?question_id=' . $_POST['question_id']));
             return;
@@ -132,6 +139,9 @@ if ($LAUNCH->user->instructor) {
                                     <a href="export.php?question_id=<?= $selected_question['question_id'] ?>" class="btn btn-secondary">
                                         Export Responses
                                     </a>
+                                    <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#deleteAllEvaluationsModal">
+                                        Delete All Evaluations
+                                    </button>
                                 <?php endif; ?>
                                 <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteQuestionModal">
                                     Delete Question
@@ -210,6 +220,11 @@ if ($LAUNCH->user->instructor) {
                                             <textarea class="form-control" id="edit_prompt" name="prompt" rows="5" required><?= htmlspecialchars($selected_question['prompt']) ?></textarea>
                                         </div>
                                         <div class="form-group">
+                                            <label for="edit_additional_prompt">Ek Değerlendirme Talimatları:</label>
+                                            <textarea class="form-control" id="edit_additional_prompt" name="additional_prompt" rows="3"><?= htmlspecialchars($selected_question['additional_prompt'] ?? '') ?></textarea>
+                                            <small class="form-text text-muted">Soru özelinde ek değerlendirme talimatlarını buraya yazabilirsiniz.</small>
+                                        </div>
+                                        <div class="form-group">
                                             <label for="edit_attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
                                             <input type="number" class="form-control" id="edit_attempt_limit" name="attempt_limit" min="1" value="<?= htmlspecialchars($selected_question['attempt_limit'] ?? '') ?>">
                                         </div>
@@ -282,10 +297,39 @@ if ($LAUNCH->user->instructor) {
                             <textarea class="form-control" id="prompt" name="prompt" rows="5" required></textarea>
                         </div>
                         <div class="form-group">
+                            <label for="additional_prompt">Ek Değerlendirme Talimatları:</label>
+                            <textarea class="form-control" id="additional_prompt" name="additional_prompt" rows="3"></textarea>
+                            <small class="form-text text-muted">Soru özelinde ek değerlendirme talimatlarını buraya yazabilirsiniz.</small>
+                        </div>
+                        <div class="form-group">
                             <label for="attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
                             <input type="number" class="form-control" id="attempt_limit" name="attempt_limit" min="1">
                         </div>
                         <button type="submit" class="btn btn-primary">Save Question</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete All Evaluations Modal -->
+    <div class="modal fade" id="deleteAllEvaluationsModal" tabindex="-1" role="dialog" aria-labelledby="deleteAllEvaluationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteAllEvaluationsModalLabel">Delete All Evaluations</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete all evaluations for this question? This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <form method="post" style="display: inline;">
+                        <input type="hidden" name="delete_all_evaluations" value="1">
+                        <button type="submit" class="btn btn-warning">Delete All Evaluations</button>
                     </form>
                 </div>
             </div>

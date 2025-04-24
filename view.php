@@ -36,31 +36,40 @@ if (!$response) {
 $adjacent = $db->getAdjacentResponses($response_id);
 
 // Handle evaluation request
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['evaluate'])) {
-    try {
-        // Get API key from settings
-        $apiKey = Settings::linkGet('gemini_api_key');
-        if (!$apiKey) {
-            $_SESSION['error'] = 'Gemini API key not configured';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['evaluate'])) {
+        try {
+            // Get API key from settings
+            $apiKey = Settings::linkGet('gemini_api_key');
+            if (!$apiKey) {
+                $_SESSION['error'] = 'Gemini API key not configured';
+                header('Location: ' . addSession('view.php?response_id=' . $response_id));
+                return;
+            }
+
+            $rater = new GeminiRater($apiKey);
+            $evaluation = $rater->evaluate(
+                $response['question'],
+                $response['answer'],
+                $response['prompt'],
+                $response['additional_prompt'] ?? null
+            );
+
+            // Store evaluation result
+            $db->saveEvaluation($response_id, $evaluation['raw_response']);
+
+            $_SESSION['success'] = 'Evaluation completed successfully';
+            header('Location: ' . addSession('view.php?response_id=' . $response_id));
+            return;
+        } catch (Exception $e) {
+            $_SESSION['error'] = 'Evaluation failed: ' . $e->getMessage();
             header('Location: ' . addSession('view.php?response_id=' . $response_id));
             return;
         }
-
-        $rater = new GeminiRater($apiKey);
-        $evaluation = $rater->evaluate(
-            $response['question'],
-            $response['answer'],
-            $response['prompt']
-        );
-
-        // Store evaluation result
-        $db->saveEvaluation($response_id, $evaluation['raw_response']);
-
-        $_SESSION['success'] = 'Evaluation completed successfully';
-        header('Location: ' . addSession('view.php?response_id=' . $response_id));
-        return;
-    } catch (Exception $e) {
-        $_SESSION['error'] = 'Evaluation failed: ' . $e->getMessage();
+    } elseif (isset($_POST['delete_all_evaluations'])) {
+        // Delete all evaluations for this question
+        $db->deleteAllEvaluationsForQuestion($response['question_id']);
+        $_SESSION['success'] = 'All evaluations for this question have been deleted';
         header('Location: ' . addSession('view.php?response_id=' . $response_id));
         return;
     }
@@ -143,15 +152,14 @@ $OUTPUT->flashMessages();
                 <div class="alert alert-warning">
                     Gemini API key is not configured. Please configure it in the settings before evaluating responses.
                 </div>
-            <?php else: ?>
-                <div class="mt-4">
-                    <form method="post">
-                        <button type="submit" name="evaluate" value="1" class="btn btn-primary">
-                            <?= isset($response['evaluation_text']) ? 'Re-evaluate' : 'Evaluate' ?> Response
-                        </button>
-                    </form>
-                </div>
             <?php endif; ?>
+            <div class="mt-4">
+                <form method="post">
+                    <button type="submit" name="evaluate" value="1" class="btn btn-primary">
+                        <?= isset($response['evaluation_text']) ? 'Re-evaluate' : 'Evaluate' ?> Response
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 

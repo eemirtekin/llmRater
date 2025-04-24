@@ -18,6 +18,7 @@ class DbHelper {
             title VARCHAR(255) NOT NULL,
             question TEXT NOT NULL,
             prompt TEXT NOT NULL,
+            additional_prompt TEXT,
             attempt_limit INT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -73,6 +74,22 @@ class DbHelper {
             $this->PDOX->queryDie($sql);
         }
 
+        // Check if additional_prompt column exists
+        $sql = "SELECT COUNT(*) as count 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = '{$this->p}llm_questions' 
+                AND column_name = 'additional_prompt'";
+        
+        $result = $this->PDOX->rowDie($sql);
+        
+        if ($result['count'] == 0) {
+            // Add additional_prompt column if it doesn't exist
+            $sql = "ALTER TABLE {$this->p}llm_questions 
+                    ADD COLUMN additional_prompt TEXT AFTER prompt";
+            $this->PDOX->queryDie($sql);
+        }
+
         // Check if attempt_limit column exists
         $sql = "SELECT COUNT(*) as count 
                 FROM information_schema.columns 
@@ -88,19 +105,70 @@ class DbHelper {
                     ADD COLUMN attempt_limit INT DEFAULT NULL AFTER prompt";
             $this->PDOX->queryDie($sql);
         }
+
+        // Check if evaluation_text column exists
+        $sql = "SELECT COUNT(*) as count 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = '{$this->p}llm_responses' 
+                AND column_name = 'evaluation_text'";
+        
+        $result = $this->PDOX->rowDie($sql);
+        
+        if ($result['count'] == 0) {
+            // Add evaluation_text column if it doesn't exist
+            $sql = "ALTER TABLE {$this->p}llm_responses 
+                    ADD COLUMN evaluation_text TEXT DEFAULT NULL,
+                    ADD COLUMN evaluated_at TIMESTAMP NULL DEFAULT NULL";
+            $this->PDOX->queryDie($sql);
+
+            // Migrate existing evaluations from llm_evaluations table if it exists
+            $sql = "SELECT COUNT(*) as count 
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE()
+                    AND table_name = '{$this->p}llm_evaluations'";
+            $result = $this->PDOX->rowDie($sql);
+            
+            if ($result['count'] > 0) {
+                // Migrate data from llm_evaluations table
+                $sql = "UPDATE {$this->p}llm_responses r
+                        LEFT JOIN {$this->p}llm_evaluations e ON r.response_id = e.response_id
+                        SET r.evaluation_text = e.evaluation_text,
+                            r.evaluated_at = e.evaluated_at
+                        WHERE e.response_id IS NOT NULL";
+                $this->PDOX->queryDie($sql);
+            }
+        }
+
+        // Remove instructor_instructions column if it exists
+        $sql = "SELECT COUNT(*) as count 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = '{$this->p}llm_responses' 
+                AND column_name = 'instructor_instructions'";
+        
+        $result = $this->PDOX->rowDie($sql);
+        
+        if ($result['count'] > 0) {
+            // Drop instructor_instructions column
+            $sql = "ALTER TABLE {$this->p}llm_responses 
+                    DROP COLUMN instructor_instructions";
+            $this->PDOX->queryDie($sql);
+        }
     }
 
-    public function saveQuestion($linkId, $title, $question, $prompt, $attemptLimit = null) {
+    public function saveQuestion($linkId, $title, $question, $prompt, $attemptLimit = null, $additionalPrompt = null) {
         $sql = "INSERT INTO {$this->p}llm_questions 
-                (link_id, title, question, prompt, attempt_limit) 
-                VALUES (:lid, :title, :q, :p, :limit)";
+                (link_id, title, question, prompt, attempt_limit, additional_prompt) 
+                VALUES (:lid, :title, :q, :p, :limit, :additional)";
         
         $values = array(
             ':lid' => $linkId,
             ':title' => $title,
             ':q' => $question,
             ':p' => $prompt,
-            ':limit' => $attemptLimit
+            ':limit' => $attemptLimit,
+            ':additional' => $additionalPrompt
         );
         
         $this->PDOX->queryDie($sql, $values);
@@ -189,37 +257,17 @@ class DbHelper {
     }
 
     public function saveEvaluation($responseId, $evaluationText) {
-        // First check if an evaluation exists
-        $existingEvaluation = $this->getEvaluation($responseId);
+        $sql = "UPDATE {$this->p}llm_responses 
+                SET evaluation_text = :evaluation_text,
+                    evaluated_at = NOW() 
+                WHERE response_id = :response_id";
         
-        if ($existingEvaluation) {
-            // Update existing evaluation
-            $sql = "UPDATE {$this->p}llm_evaluations 
-                    SET evaluation_text = :eval,
-                        evaluated_at = CURRENT_TIMESTAMP
-                    WHERE evaluation_id = :eid";
-            
-            $values = array(
-                ':eval' => $evaluationText,
-                ':eid' => $existingEvaluation['evaluation_id']
-            );
-            
-            $this->PDOX->queryDie($sql, $values);
-            return $existingEvaluation['evaluation_id'];
-        } else {
-            // Insert new evaluation
-            $sql = "INSERT INTO {$this->p}llm_evaluations 
-                    (response_id, evaluation_text) 
-                    VALUES (:rid, :eval)";
-            
-            $values = array(
-                ':rid' => $responseId,
-                ':eval' => $evaluationText
-            );
-            
-            $this->PDOX->queryDie($sql, $values);
-            return $this->PDOX->lastInsertId();
-        }
+        $params = [
+            ':evaluation_text' => $evaluationText,
+            ':response_id' => $responseId
+        ];
+        
+        return $this->PDOX->queryDie($sql, $params);
     }
 
     public function getEvaluation($responseId) {
@@ -232,11 +280,10 @@ class DbHelper {
 
     public function getResponseDetails($response_id) {
         $stmt = $this->PDOX->queryDie(
-            "SELECT r.*, u.displayname, q.question, q.prompt, q.title, e.evaluation_text, e.evaluated_at 
+            "SELECT r.*, u.displayname, q.question, q.prompt, q.additional_prompt, q.title, r.evaluation_text, r.evaluated_at 
             FROM {$this->p}llm_responses r
             JOIN {$this->p}lti_user u ON r.user_id = u.user_id
             JOIN {$this->p}llm_questions q ON r.question_id = q.question_id
-            LEFT JOIN {$this->p}llm_evaluations e ON r.response_id = e.response_id
             WHERE r.response_id = :rid",
             array(':rid' => $response_id)
         );
@@ -248,21 +295,19 @@ class DbHelper {
     }
 
     public function getAllResponsesForExport($questionId) {
-        $sql = "SELECT r.*, q.question, q.prompt, e.evaluation_text, e.evaluated_at,
-                       u.displayname, u.email
+        $sql = "SELECT r.*, q.question, q.prompt, u.displayname, u.email
                 FROM {$this->p}llm_responses r
                 JOIN {$this->p}llm_questions q ON r.question_id = q.question_id
                 JOIN {$this->p}lti_user u ON r.user_id = u.user_id
-                LEFT JOIN {$this->p}llm_evaluations e ON r.response_id = e.response_id
                 WHERE q.question_id = :qid
                 ORDER BY r.submitted_at DESC";
         
         return $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
     }
 
-    public function updateQuestion($questionId, $title, $question, $prompt, $attemptLimit = null) {
+    public function updateQuestion($questionId, $title, $question, $prompt, $attemptLimit = null, $additionalPrompt = null) {
         $sql = "UPDATE {$this->p}llm_questions 
-                SET question = :q, prompt = :p, title = :title, attempt_limit = :limit 
+                SET question = :q, prompt = :p, title = :title, attempt_limit = :limit, additional_prompt = :additional
                 WHERE question_id = :qid";
         
         $values = array(
@@ -270,7 +315,8 @@ class DbHelper {
             ':q' => $question,
             ':p' => $prompt,
             ':title' => $title,
-            ':limit' => $attemptLimit
+            ':limit' => $attemptLimit,
+            ':additional' => $additionalPrompt
         );
         
         return $this->PDOX->queryDie($sql, $values);
@@ -353,5 +399,13 @@ class DbHelper {
             'prev_id' => $prev ? $prev['prev_id'] : null,
             'next_id' => $next ? $next['next_id'] : null
         );
+    }
+
+    public function deleteAllEvaluationsForQuestion($questionId) {
+        $sql = "UPDATE {$this->p}llm_responses 
+                SET evaluation_text = NULL, evaluated_at = NULL 
+                WHERE question_id = :qid";
+        
+        return $this->PDOX->queryDie($sql, array(':qid' => $questionId));
     }
 }

@@ -10,13 +10,19 @@ class GeminiRater {
         $this->apiKey = $apiKey;
     }
 
-    public function evaluate($question, $answer, $prompt) {
+    public function evaluate($question, $answer, $prompt, $additionalPrompt = null) {
         $url = "{$this->baseUrl}/{$this->model}:generateContent?key={$this->apiKey}";
         
         // Construct the evaluation prompt
         $systemPrompt = "You are an educational assessment assistant. Your task is to evaluate a student's answer based on the given criteria.\n\n";
-        $context = "Question: {$question}\n\nStudent Answer: {$answer}\n\nEvaluation Criteria:\n{$prompt}\n\n";
-        $task = "Please evaluate the student's answer based on the given criteria. Provide a structured response with scoring and detailed feedback.";
+        $context = "Question: {$question}\n\nStudent Answer: {$answer}\n\nEvaluation Criteria:\n{$prompt}";
+        
+        // Add additional prompt if provided
+        if ($additionalPrompt) {
+            $context .= "\n\nAdditional Instructions:\n{$additionalPrompt}";
+        }
+        
+        $task = "\n\nPlease evaluate the student's answer based on the given criteria. Provide a structured response with scoring and detailed feedback.";
 
         $data = [
             "contents" => [
