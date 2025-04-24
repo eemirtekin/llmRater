@@ -408,4 +408,16 @@ class DbHelper {
         
         return $this->PDOX->queryDie($sql, array(':qid' => $questionId));
     }
+
+    public function getUnevaluatedResponses($questionId) {
+        $sql = "SELECT r.*, u.displayname, q.question, q.prompt, q.additional_prompt
+                FROM {$this->p}llm_responses r
+                JOIN {$this->p}lti_user u ON r.user_id = u.user_id
+                JOIN {$this->p}llm_questions q ON r.question_id = q.question_id
+                WHERE r.question_id = :qid
+                AND (r.evaluation_text IS NULL OR r.evaluated_at IS NULL)
+                ORDER BY r.submitted_at DESC";
+        
+        return $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
+    }
 }

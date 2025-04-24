@@ -10,11 +10,18 @@
 .btn-group {
     display: flex;
     gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
 }
 
 .btn-group .btn {
     border-radius: 4px !important;
     white-space: nowrap;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    margin: 0.25rem 0;
+    flex: 0 1 auto;
 }
 
 .btn-group .btn-secondary {
@@ -31,6 +38,7 @@
 .markdown-content {
     line-height: 1.6;
     color: #333;
+    margin-bottom: 2rem;
 }
 
 .markdown-content h1,
@@ -83,7 +91,7 @@
     width: 100%;
     margin: 1em 0;
     background-color: #fff;
-    border: 1px solid #ddd; /* Dış kenarlık eklendi */
+    border: 1px solid #ddd; /* Added outer border */
 }
 
 .markdown-content th,
@@ -96,10 +104,10 @@
 .markdown-content th {
     background-color: #f5f5f5;
     font-weight: bold;
-    border-bottom: 2px solid #ddd; /* Başlık alt çizgisi kalınlaştırıldı */
+    border-bottom: 2px solid #ddd; /* Made header bottom border thicker */
 }
 
-/* Diğer tablo stilleri aynen kalacak */
+/* Other table styles will remain the same */
 .markdown-content tr:nth-child(even) {
     background-color: #f9f9f9;
 }
@@ -144,4 +152,34 @@
 .navigation-buttons .btn {
     min-width: 120px;
     padding: 0.5rem 1rem;
+}
+
+.card-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.card-header h3 {
+    margin: 0;
+}
+
+.card-body h4 {
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 768px) {
+    .btn-group {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .btn-group .btn {
+        flex: 1 1 auto;
+        min-width: auto;
+    }
 }

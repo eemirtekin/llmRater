@@ -64,6 +64,32 @@ class GeminiRater {
         return $this->parseResponse($result);
     }
 
+    public function evaluateBatch($responses, $batchSize = 5) {
+        $results = [];
+        $batches = array_chunk($responses, $batchSize);
+        
+        foreach ($batches as $batch) {
+            $promises = [];
+            foreach ($batch as $response) {
+                try {
+                    $result = $this->evaluate(
+                        $response['question'],
+                        $response['answer'],
+                        $response['prompt'],
+                        $response['additional_prompt'] ?? null
+                    );
+                    $results[$response['response_id']] = $result;
+                } catch (\Exception $e) {
+                    // Log error but continue with other evaluations
+                    error_log("Error evaluating response {$response['response_id']}: " . $e->getMessage());
+                    continue;
+                }
+            }
+        }
+        
+        return $results;
+    }
+
     private function parseResponse($result) {
         if (!$result) {
             throw new \Exception("Empty response from API");

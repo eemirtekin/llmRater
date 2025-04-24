@@ -1,6 +1,7 @@
 <?php
 require_once "../config.php";
 require_once "lib/DbHelper.php";
+require_once "lib/GeminiRater.php";
 require_once "lib/Parsedown.php";  // Include Parsedown
 
 use \Tsugi\Util\U;
@@ -8,6 +9,7 @@ use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Settings;
 use \Tsugi\UI\SettingsForm;
 use \LLMRater\DbHelper;
+use \LLMRater\GeminiRater;
 
 $LAUNCH = LTIX::requireData();
 $db = new DbHelper($PDOX, $CFG->dbprefix);
@@ -26,6 +28,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->deleteQuestion($_POST['question_id']);
             $_SESSION['success'] = 'Question deleted';
             header('Location: ' . addSession('index.php'));
+            return;
+        } else if (isset($_POST['evaluate_all']) && isset($_GET['question_id'])) {
+            // Get API key
+            $apiKey = Settings::linkGet('gemini_api_key');
+            if (!$apiKey) {
+                $_SESSION['error'] = 'Gemini API key not configured';
+                header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
+                return;
+            }
+
+            // Get all unevaluated responses
+            $responses = $db->getUnevaluatedResponses($_GET['question_id']);
+            if (empty($responses)) {
+                $_SESSION['success'] = 'No responses to evaluate';
+                header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
+                return;
+            }
+
+            $rater = new GeminiRater($apiKey);
+            try {
+                // Process responses in batches
+                $results = $rater->evaluateBatch($responses, 5); // Process 5 at a time
+                
+                // Save all evaluation results
+                $evaluatedCount = 0;
+                foreach ($results as $responseId => $evaluation) {
+                    $db->saveEvaluation($responseId, $evaluation['raw_response']);
+                    $evaluatedCount++;
+                }
+
+                $_SESSION['success'] = "Successfully evaluated $evaluatedCount responses";
+            } catch (Exception $e) {
+                $_SESSION['error'] = 'Evaluation failed: ' . $e->getMessage();
+            }
+            header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
             return;
         } else if (isset($_POST['title']) && isset($_POST['question']) && isset($_POST['prompt']) && !isset($_POST['question_id'])) {
             $attemptLimit = !empty($_POST['attempt_limit']) ? intval($_POST['attempt_limit']) : null;
@@ -132,28 +169,12 @@ if ($LAUNCH->user->instructor) {
             <div class="col-md-8">
                 <?php if ($selected_question): ?>
                     <div class="card mb-4">
-                        <div class="card-header d-flex justify-content-between align-items-center">
+                        <div class="card-header">
                             <h3 class="mb-0">Question Details</h3>
-                            <div class="btn-group">
-                                <button class="btn btn-primary" data-toggle="modal" data-target="#editQuestionModal">
-                                    Edit Question
-                                </button>
-                                <?php if (count($responses) > 0): ?>
-                                    <a href="export.php?question_id=<?= $selected_question['question_id'] ?>" class="btn btn-secondary">
-                                        Export Responses
-                                    </a>
-                                    <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#deleteAllEvaluationsModal">
-                                        Delete All Evaluations
-                                    </button>
-                                <?php endif; ?>
-                                <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteQuestionModal">
-                                    Delete Question
-                                </button>
-                            </div>
                         </div>
                         <div class="card-body">
-                            <h4>Question:</h4>
-                            <div class="markdown-content">
+                            <h4><?= htmlspecialchars($selected_question['title']) ?></h4>
+                            <div class="markdown-content mb-4">
                                 <?php 
                                     $parsedown = new Parsedown();
                                     // Clean HTML tags and process markdown
@@ -163,6 +184,30 @@ if ($LAUNCH->user->instructor) {
                                     echo $parsedown->text($cleanQuestion); 
                                 ?>
                             </div>
+                            
+                            <div class="btn-group mb-4">
+                                <button class="btn btn-primary" data-toggle="modal" data-target="#editQuestionModal">
+                                    Edit Question
+                                </button>
+                                <?php if (count($responses) > 0): ?>
+                                    <a href="export.php?question_id=<?= $selected_question['question_id'] ?>" class="btn btn-secondary">
+                                        Export Responses
+                                    </a>
+                                    <form method="post" style="display: inline;">
+                                        <input type="hidden" name="evaluate_all" value="1">
+                                        <button type="submit" class="btn btn-success">
+                                            Evaluate All Responses
+                                        </button>
+                                    </form>
+                                    <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#deleteAllEvaluationsModal">
+                                        Delete All Evaluations
+                                    </button>
+                                <?php endif; ?>
+                                <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteQuestionModal">
+                                    Delete Question
+                                </button>
+                            </div>
+
                             <div class="mt-4">
                                 <h4 style="display: inline-block; margin-right: 10px;">Evaluation Criteria:</h4>
                                 <button class="btn btn-link p-0" data-toggle="modal" data-target="#evaluationCriteriaModal" style="vertical-align: baseline;">
@@ -223,9 +268,9 @@ if ($LAUNCH->user->instructor) {
                                             <textarea class="form-control" id="edit_prompt" name="prompt" rows="5" required><?= htmlspecialchars($selected_question['prompt']) ?></textarea>
                                         </div>
                                         <div class="form-group">
-                                            <label for="edit_additional_prompt">Ek Değerlendirme Talimatları:</label>
+                                            <label for="edit_additional_prompt">Additional Evaluation Instructions:</label>
                                             <textarea class="form-control" id="edit_additional_prompt" name="additional_prompt" rows="3"><?= htmlspecialchars($selected_question['additional_prompt'] ?? '') ?></textarea>
-                                            <small class="form-text text-muted">Soru özelinde ek değerlendirme talimatlarını buraya yazabilirsiniz.</small>
+                                            <small class="form-text text-muted">You can write additional evaluation instructions specific to this question here.</small>
                                         </div>
                                         <div class="form-group">
                                             <label for="edit_attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
@@ -300,9 +345,9 @@ if ($LAUNCH->user->instructor) {
                             <textarea class="form-control" id="prompt" name="prompt" rows="5" required></textarea>
                         </div>
                         <div class="form-group">
-                            <label for="additional_prompt">Ek Değerlendirme Talimatları:</label>
+                            <label for="additional_prompt">Additional Evaluation Instructions:</label>
                             <textarea class="form-control" id="additional_prompt" name="additional_prompt" rows="3"></textarea>
-                            <small class="form-text text-muted">Soru özelinde ek değerlendirme talimatlarını buraya yazabilirsiniz.</small>
+                            <small class="form-text text-muted">You can write additional evaluation instructions specific to this question here.</small>
                         </div>
                         <div class="form-group">
                             <label for="attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
