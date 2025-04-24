@@ -2,6 +2,7 @@
 require_once "../config.php";
 require_once "lib/DbHelper.php";
 require_once "lib/GeminiRater.php";
+require_once "lib/OpenAIRater.php";
 require_once "lib/Parsedown.php";  // Include Parsedown
 
 use \Tsugi\Util\U;
@@ -10,6 +11,7 @@ use \Tsugi\Core\Settings;
 use \Tsugi\UI\SettingsForm;
 use \LLMRater\DbHelper;
 use \LLMRater\GeminiRater;
+use \LLMRater\OpenAIRater;
 
 $LAUNCH = LTIX::requireData();
 $db = new DbHelper($PDOX, $CFG->dbprefix);
@@ -30,12 +32,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ' . addSession('index.php'));
             return;
         } else if (isset($_POST['evaluate_all']) && isset($_GET['question_id'])) {
-            // Get API key
-            $apiKey = Settings::linkGet('gemini_api_key');
-            if (!$apiKey) {
-                $_SESSION['error'] = 'Gemini API key not configured';
-                header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
-                return;
+            $question = $db->getQuestionById($_GET['question_id']);
+            $llmModel = $question['llm_model'] ?? 'gemini';
+
+            if ($llmModel === 'openai') {
+                $apiKey = Settings::linkGet('openai_api_key');
+                if (!$apiKey) {
+                    $_SESSION['error'] = 'OpenAI API key not configured';
+                    header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
+                    return;
+                }
+                $rater = new OpenAIRater($apiKey);
+            } else {
+                $apiKey = Settings::linkGet('gemini_api_key');
+                if (!$apiKey) {
+                    $_SESSION['error'] = 'Gemini API key not configured';
+                    header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
+                    return;
+                }
+                $rater = new GeminiRater($apiKey);
             }
 
             // Get all unevaluated responses
@@ -46,7 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 return;
             }
 
-            $rater = new GeminiRater($apiKey);
             try {
                 // Process responses in batches
                 $results = $rater->evaluateBatch($responses, 5); // Process 5 at a time
@@ -67,14 +81,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else if (isset($_POST['title']) && isset($_POST['question']) && isset($_POST['prompt']) && !isset($_POST['question_id'])) {
             $attemptLimit = !empty($_POST['attempt_limit']) ? intval($_POST['attempt_limit']) : null;
             $additionalPrompt = $_POST['additional_prompt'] ?? null;
-            $db->saveQuestion($LAUNCH->link->id, $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit, $additionalPrompt);
+            $llmModel = $_POST['llm_model'] ?? 'gemini';
+            $db->saveQuestion($LAUNCH->link->id, $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit, $additionalPrompt, $llmModel);
             $_SESSION['success'] = 'Question saved';
             header('Location: ' . addSession('index.php'));
             return;
         } else if (isset($_POST['title']) && isset($_POST['question']) && isset($_POST['prompt']) && isset($_POST['question_id'])) {
             $attemptLimit = !empty($_POST['attempt_limit']) ? intval($_POST['attempt_limit']) : null;
             $additionalPrompt = $_POST['additional_prompt'] ?? null;
-            $db->updateQuestion($_POST['question_id'], $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit, $additionalPrompt);
+            $llmModel = $_POST['llm_model'] ?? 'gemini';
+            $db->updateQuestion($_POST['question_id'], $_POST['title'], $_POST['question'], $_POST['prompt'], $attemptLimit, $additionalPrompt, $llmModel);
             $_SESSION['success'] = 'Question updated';
             header('Location: ' . addSession('index.php?question_id=' . $_POST['question_id']));
             return;
@@ -316,6 +332,13 @@ if ($LAUNCH->user->instructor) {
                                             <label for="edit_attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
                                             <input type="number" class="form-control" id="edit_attempt_limit" name="attempt_limit" min="1" value="<?= htmlspecialchars($selected_question['attempt_limit'] ?? '') ?>">
                                         </div>
+                                        <div class="form-group">
+                                            <label for="edit_llm_model">LLM Model:</label>
+                                            <select class="form-control" id="edit_llm_model" name="llm_model">
+                                                <option value="gemini" <?= ($selected_question['llm_model'] ?? 'gemini') === 'gemini' ? 'selected' : '' ?>>Gemini</option>
+                                                <option value="openai" <?= ($selected_question['llm_model'] ?? '') === 'openai' ? 'selected' : '' ?>>OpenAI (GPT-4)</option>
+                                            </select>
+                                        </div>
                                         <button type="submit" class="btn btn-primary">Update Question</button>
                                     </form>
                                 </div>
@@ -393,6 +416,13 @@ if ($LAUNCH->user->instructor) {
                             <label for="attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
                             <input type="number" class="form-control" id="attempt_limit" name="attempt_limit" min="1">
                         </div>
+                        <div class="form-group">
+                            <label for="llm_model">LLM Model:</label>
+                            <select class="form-control" id="llm_model" name="llm_model">
+                                <option value="gemini">Gemini</option>
+                                <option value="openai">OpenAI (GPT-4)</option>
+                            </select>
+                        </div>
                         <button type="submit" class="btn btn-primary">Save Question</button>
                     </form>
                 </div>
@@ -454,6 +484,7 @@ if ($LAUNCH->user->instructor) {
     SettingsForm::start();
     echo("<p>Configure the following settings:</p>\n");
     SettingsForm::text('gemini_api_key', 'Gemini API Key');
+    SettingsForm::text('openai_api_key', 'OpenAI API Key');
     SettingsForm::done();
     SettingsForm::end();
 } else {

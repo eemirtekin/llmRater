@@ -74,6 +74,22 @@ class DbHelper {
             $this->PDOX->queryDie($sql);
         }
 
+        // Check if llm_model column exists
+        $sql = "SELECT COUNT(*) as count 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = '{$this->p}llm_questions' 
+                AND column_name = 'llm_model'";
+        
+        $result = $this->PDOX->rowDie($sql);
+        
+        if ($result['count'] == 0) {
+            // Add llm_model column if it doesn't exist
+            $sql = "ALTER TABLE {$this->p}llm_questions 
+                    ADD COLUMN llm_model VARCHAR(50) DEFAULT 'gemini' AFTER link_id";
+            $this->PDOX->queryDie($sql);
+        }
+
         // Check if additional_prompt column exists
         $sql = "SELECT COUNT(*) as count 
                 FROM information_schema.columns 
@@ -157,10 +173,10 @@ class DbHelper {
         }
     }
 
-    public function saveQuestion($linkId, $title, $question, $prompt, $attemptLimit = null, $additionalPrompt = null) {
+    public function saveQuestion($linkId, $title, $question, $prompt, $attemptLimit = null, $additionalPrompt = null, $llmModel = 'gemini') {
         $sql = "INSERT INTO {$this->p}llm_questions 
-                (link_id, title, question, prompt, attempt_limit, additional_prompt) 
-                VALUES (:lid, :title, :q, :p, :limit, :additional)";
+                (link_id, title, question, prompt, attempt_limit, additional_prompt, llm_model) 
+                VALUES (:lid, :title, :q, :p, :limit, :additional, :model)";
         
         $values = array(
             ':lid' => $linkId,
@@ -168,7 +184,8 @@ class DbHelper {
             ':q' => $question,
             ':p' => $prompt,
             ':limit' => $attemptLimit,
-            ':additional' => $additionalPrompt
+            ':additional' => $additionalPrompt,
+            ':model' => $llmModel
         );
         
         $this->PDOX->queryDie($sql, $values);
@@ -267,10 +284,9 @@ class DbHelper {
         return $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
     }
 
-    public function updateQuestion($questionId, $title, $question, $prompt, $attemptLimit = null, $additionalPrompt = null) {
+    public function updateQuestion($questionId, $title, $question, $prompt, $attemptLimit = null, $additionalPrompt = null, $llmModel = null) {
         $sql = "UPDATE {$this->p}llm_questions 
-                SET question = :q, prompt = :p, title = :title, attempt_limit = :limit, additional_prompt = :additional
-                WHERE question_id = :qid";
+                SET question = :q, prompt = :p, title = :title, attempt_limit = :limit, additional_prompt = :additional";
         
         $values = array(
             ':qid' => $questionId,
@@ -280,6 +296,13 @@ class DbHelper {
             ':limit' => $attemptLimit,
             ':additional' => $additionalPrompt
         );
+
+        if ($llmModel !== null) {
+            $sql .= ", llm_model = :model";
+            $values[':model'] = $llmModel;
+        }
+
+        $sql .= " WHERE question_id = :qid";
         
         return $this->PDOX->queryDie($sql, $values);
     }

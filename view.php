@@ -2,13 +2,17 @@
 require_once "../config.php";
 require_once "lib/DbHelper.php";
 require_once "lib/GeminiRater.php";
+require_once "lib/OpenAIRater.php";
 require_once "lib/Parsedown.php";
 
 use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Settings;
 use \LLMRater\DbHelper;
 use \LLMRater\GeminiRater;
+use \LLMRater\OpenAIRater;
 
+// Initialize $responses as empty array
+$responses = [];
 $LAUNCH = LTIX::requireData();
 if (!$LAUNCH->user->instructor) {
     die('Instructor role required');
@@ -30,6 +34,9 @@ if (!$response) {
     return;
 }
 
+// Get responses for the current question
+$responses = $db->getResponses($response['question_id']);
+
 // Get navigation links
 $adjacent = $db->getAdjacentResponses($response_id);
 
@@ -37,12 +44,23 @@ $adjacent = $db->getAdjacentResponses($response_id);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['evaluate'])) {
         try {
-            $apiKey = Settings::linkGet('gemini_api_key');
-            if (!$apiKey) {
-                throw new Exception('Gemini API key not configured');
+            $question = $db->getQuestionById($response['question_id']);
+            $llmModel = $question['llm_model'] ?? 'gemini';
+
+            if ($llmModel === 'openai') {
+                $apiKey = Settings::linkGet('openai_api_key');
+                if (!$apiKey) {
+                    throw new Exception('OpenAI API key not configured');
+                }
+                $rater = new OpenAIRater($apiKey);
+            } else {
+                $apiKey = Settings::linkGet('gemini_api_key');
+                if (!$apiKey) {
+                    throw new Exception('Gemini API key not configured');
+                }
+                $rater = new GeminiRater($apiKey);
             }
 
-            $rater = new GeminiRater($apiKey);
             $evaluation = $rater->evaluate(
                 $response['question'],
                 $response['answer'],
@@ -127,36 +145,20 @@ $OUTPUT->flashMessages();
             <?php endif; ?>
 
             <?php 
-            $apiKey = Settings::linkGet('gemini_api_key');
-            if (!$apiKey): ?>
+            $question = $db->getQuestionById($response['question_id']);
+            $llmModel = $question['llm_model'] ?? 'gemini';
+            $modelApiKey = $llmModel === 'openai' ? 
+                Settings::linkGet('openai_api_key') : 
+                Settings::linkGet('gemini_api_key');
+            
+            if (!$modelApiKey): 
+                $modelName = $llmModel === 'openai' ? 'OpenAI' : 'Gemini';
+            ?>
                 <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i> Gemini API key is not configured. Please configure it in the settings.
+                    <i class="fas fa-exclamation-triangle"></i> <?= $modelName ?> API key is not configured. Please configure it in the settings.
                 </div>
             <?php endif; ?>
         </div>
-    </div>
-
-    <div class="btn-group mb-4">
-        <button class="btn btn-primary" data-toggle="modal" data-target="#editQuestionModal">
-            <i class="fas fa-edit"></i> Edit Question
-        </button>
-        <?php if (count($responses) > 0): ?>
-            <a href="export.php?question_id=<?= $selected_question['question_id'] ?>" class="btn btn-secondary">
-                <i class="fas fa-file-export"></i> Export
-            </a>
-            <form method="post" style="display: inline;">
-                <input type="hidden" name="evaluate_all" value="1">
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-check-circle"></i> Evaluate All
-                </button>
-            </form>
-            <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#deleteAllEvaluationsModal">
-                <i class="fas fa-trash-alt"></i> Clear Evaluations
-            </button>
-        <?php endif; ?>
-        <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteQuestionModal">
-            <i class="fas fa-times-circle"></i> Delete
-        </button>
     </div>
 
     <div class="navigation-buttons">
