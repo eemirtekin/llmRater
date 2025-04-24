@@ -32,13 +32,18 @@ if (!$response) {
     return;
 }
 
+// Get navigation links
+$adjacent = $db->getAdjacentResponses($response_id);
+
 // Handle evaluation request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['evaluate'])) {
     try {
         // Get API key from settings
         $apiKey = Settings::linkGet('gemini_api_key');
         if (!$apiKey) {
-            throw new Exception('Gemini API key not configured');
+            $_SESSION['error'] = 'Gemini API key not configured';
+            header('Location: ' . addSession('view.php?response_id=' . $response_id));
+            return;
         }
 
         $rater = new GeminiRater($apiKey);
@@ -56,6 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['evaluate'])) {
         return;
     } catch (Exception $e) {
         $_SESSION['error'] = 'Evaluation failed: ' . $e->getMessage();
+        header('Location: ' . addSession('view.php?response_id=' . $response_id));
+        return;
     }
 }
 
@@ -63,17 +70,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['evaluate'])) {
 $OUTPUT->header();
 ?>
 <link rel="stylesheet" href="css/custom.css?v=<?php echo filemtime(__DIR__ . '/css/custom.css'); ?>">
+<style>
+.navigation-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.navigation-buttons .btn {
+    min-width: 100px;
+}
+</style>
 <?php
 $OUTPUT->bodyStart();
 
 $menu = new \Tsugi\UI\MenuSet();
-$menu->addLeft('Back', 'index.php');
+$menu->addLeft('Back to List', 'index.php');
 $OUTPUT->topNav($menu);
 $OUTPUT->flashMessages();
 ?>
 
 <div class="container">
-    <h2>Student Response</h2>
+    <h2 class="mb-3">Student Response</h2>
+
     <div class="card mb-4">
         <div class="card-header">
             <strong>Student:</strong> <?= htmlspecialchars($response['displayname'] ?? '') ?>
@@ -112,21 +131,46 @@ $OUTPUT->flashMessages();
 
             <?php if (isset($response['evaluation_text'])): ?>
                 <h5>LLM Evaluation:</h5>
-                <div class="mb-4">
-                    <?= nl2br(htmlspecialchars($response['evaluation_text'])) ?>
-                    <br>
-                    <small class="text-muted">Evaluated on: <?= htmlspecialchars($response['evaluated_at'] ?? '') ?></small>
+                <div class="evaluation-box">
+                    <pre><?= htmlspecialchars($response['evaluation_text']) ?></pre>
+                    <small class="text-muted mt-2 d-block">Evaluated on: <?= htmlspecialchars($response['evaluated_at'] ?? '') ?></small>
                 </div>
             <?php endif; ?>
 
-            <div class="mt-4">
-                <form method="post">
-                    <button type="submit" name="evaluate" class="btn btn-primary">
-                        <?= isset($response['evaluation_text']) ? 'Re-evaluate' : 'Evaluate' ?> Response
-                    </button>
-                </form>
-            </div>
+            <?php 
+            $apiKey = Settings::linkGet('gemini_api_key');
+            if (!$apiKey): ?>
+                <div class="alert alert-warning">
+                    Gemini API key is not configured. Please configure it in the settings before evaluating responses.
+                </div>
+            <?php else: ?>
+                <div class="mt-4">
+                    <form method="post">
+                        <button type="submit" name="evaluate" value="1" class="btn btn-primary">
+                            <?= isset($response['evaluation_text']) ? 'Re-evaluate' : 'Evaluate' ?> Response
+                        </button>
+                    </form>
+                </div>
+            <?php endif; ?>
         </div>
+    </div>
+
+    <div class="navigation-buttons">
+        <?php if ($adjacent && $adjacent['prev_id']): ?>
+            <a href="?response_id=<?= $adjacent['prev_id'] ?>" class="btn btn-primary">
+                <i class="fas fa-chevron-left"></i> Previous
+            </a>
+        <?php else: ?>
+            <div></div>
+        <?php endif; ?>
+
+        <?php if ($adjacent && $adjacent['next_id']): ?>
+            <a href="?response_id=<?= $adjacent['next_id'] ?>" class="btn btn-primary">
+                Next <i class="fas fa-chevron-right"></i>
+            </a>
+        <?php else: ?>
+            <div></div>
+        <?php endif; ?>
     </div>
 </div>
 

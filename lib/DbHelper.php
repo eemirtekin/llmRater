@@ -189,17 +189,37 @@ class DbHelper {
     }
 
     public function saveEvaluation($responseId, $evaluationText) {
-        $sql = "INSERT INTO {$this->p}llm_evaluations 
-                (response_id, evaluation_text) 
-                VALUES (:rid, :eval)";
+        // First check if an evaluation exists
+        $existingEvaluation = $this->getEvaluation($responseId);
         
-        $values = array(
-            ':rid' => $responseId,
-            ':eval' => $evaluationText
-        );
-        
-        $this->PDOX->queryDie($sql, $values);
-        return $this->PDOX->lastInsertId();
+        if ($existingEvaluation) {
+            // Update existing evaluation
+            $sql = "UPDATE {$this->p}llm_evaluations 
+                    SET evaluation_text = :eval,
+                        evaluated_at = CURRENT_TIMESTAMP
+                    WHERE evaluation_id = :eid";
+            
+            $values = array(
+                ':eval' => $evaluationText,
+                ':eid' => $existingEvaluation['evaluation_id']
+            );
+            
+            $this->PDOX->queryDie($sql, $values);
+            return $existingEvaluation['evaluation_id'];
+        } else {
+            // Insert new evaluation
+            $sql = "INSERT INTO {$this->p}llm_evaluations 
+                    (response_id, evaluation_text) 
+                    VALUES (:rid, :eval)";
+            
+            $values = array(
+                ':rid' => $responseId,
+                ':eval' => $evaluationText
+            );
+            
+            $this->PDOX->queryDie($sql, $values);
+            return $this->PDOX->lastInsertId();
+        }
     }
 
     public function getEvaluation($responseId) {
@@ -298,5 +318,40 @@ class DbHelper {
         
         $attempts = $this->getAttemptCount($questionId, $userId);
         return $attempts < $question['attempt_limit'];
+    }
+
+    public function getAdjacentResponses($responseId) {
+        // Get the current response's question_id and submitted_at
+        $sql = "SELECT question_id, submitted_at FROM {$this->p}llm_responses WHERE response_id = :rid";
+        $current = $this->PDOX->rowDie($sql, array(':rid' => $responseId));
+        
+        if (!$current) {
+            return null;
+        }
+
+        // Get previous response
+        $sql = "SELECT response_id as prev_id FROM {$this->p}llm_responses 
+                WHERE question_id = :qid 
+                AND submitted_at > :submitted 
+                ORDER BY submitted_at ASC LIMIT 1";
+        $prev = $this->PDOX->rowDie($sql, array(
+            ':qid' => $current['question_id'],
+            ':submitted' => $current['submitted_at']
+        ));
+
+        // Get next response
+        $sql = "SELECT response_id as next_id FROM {$this->p}llm_responses 
+                WHERE question_id = :qid 
+                AND submitted_at < :submitted 
+                ORDER BY submitted_at DESC LIMIT 1";
+        $next = $this->PDOX->rowDie($sql, array(
+            ':qid' => $current['question_id'],
+            ':submitted' => $current['submitted_at']
+        ));
+
+        return array(
+            'prev_id' => $prev ? $prev['prev_id'] : null,
+            'next_id' => $next ? $next['next_id'] : null
+        );
     }
 }

@@ -3,7 +3,7 @@ namespace LLMRater;
 
 class GeminiRater {
     private $apiKey;
-    private $model = 'gemini-pro';
+    private $model = 'gemini-2.0-flash';
     private $baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
 
     public function __construct($apiKey) {
@@ -36,7 +36,13 @@ class GeminiRater {
             'Content-Type: application/json'
         ]);
 
+        // Get HTTP response code
+        curl_setopt($ch, CURLOPT_HEADER, true);
         $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $body = substr($response, $headerSize);
+        
         $error = curl_error($ch);
         curl_close($ch);
 
@@ -44,13 +50,33 @@ class GeminiRater {
             throw new \Exception("API Error: " . $error);
         }
 
-        $result = json_decode($response, true);
+        if ($httpCode !== 200) {
+            throw new \Exception("API returned error code: " . $httpCode);
+        }
+
+        $result = json_decode($body, true);
         return $this->parseResponse($result);
     }
 
     private function parseResponse($result) {
+        if (!$result) {
+            throw new \Exception("Empty response from API");
+        }
+
+        if (isset($result['error'])) {
+            throw new \Exception("API Error: " . $result['error']['message'] ?? 'Unknown error');
+        }
+
+        if (!isset($result['candidates']) || empty($result['candidates'])) {
+            throw new \Exception("No response candidates returned from API");
+        }
+
+        if (!isset($result['candidates'][0]['content']) || !isset($result['candidates'][0]['content']['parts'])) {
+            throw new \Exception("Invalid response format: missing content or parts");
+        }
+
         if (!isset($result['candidates'][0]['content']['parts'][0]['text'])) {
-            throw new \Exception("Invalid API response format");
+            throw new \Exception("Invalid API response format: missing text");
         }
 
         return [
