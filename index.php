@@ -284,79 +284,10 @@ if ($LAUNCH->user->instructor) {
                             </div>
                         </div>
 
-                        <!-- Evaluation Criteria Modal -->
-                        <div class="modal fade" id="evaluationCriteriaModal" tabindex="-1" role="dialog" aria-labelledby="evaluationCriteriaModalLabel" aria-hidden="true">
-                            <div class="modal-dialog modal-lg" role="document">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title" id="evaluationCriteriaModalLabel">Evaluation Criteria</h5>
-                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                            <span aria-hidden="true">&times;</span>
-                                        </button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <div class="markdown-content">
-                                            <?php 
-                                                $cleanPrompt = strip_tags($selected_question['prompt']);
-                                                $cleanPrompt = implode("\n", array_map('trim', explode("\n", $cleanPrompt)));
-                                                echo $parsedown->text($cleanPrompt); 
-                                            ?>
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                    <!-- Edit Question Modal -->
-                    <div class="modal fade" id="editQuestionModal" tabindex="-1" role="dialog" aria-labelledby="editQuestionModalLabel" aria-hidden="true">
-                        <div class="modal-dialog modal-lg" role="document">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title" id="editQuestionModalLabel">Edit Question</h5>
-                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                        <span aria-hidden="true">&times;</span>
-                                    </button>
-                                </div>
-                                <div class="modal-body">
-                                    <form method="post">
-                                        <input type="hidden" name="question_id" value="<?= $selected_question['question_id'] ?>">
-                                        <div class="form-group">
-                                            <label for="edit_title">Title:</label>
-                                            <input type="text" class="form-control" id="edit_title" name="title" value="<?= htmlspecialchars($selected_question['title']) ?>" required>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="edit_question">Question:</label>
-                                            <textarea class="form-control" id="edit_question" name="question" rows="3" required><?= htmlspecialchars($selected_question['question']) ?></textarea>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="edit_prompt">Evaluation Prompt (Rubric for LLM):</label>
-                                            <textarea class="form-control" id="edit_prompt" name="prompt" rows="5" required><?= htmlspecialchars($selected_question['prompt']) ?></textarea>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="edit_additional_prompt">Additional Evaluation Instructions:</label>
-                                            <textarea class="form-control" id="edit_additional_prompt" name="additional_prompt" rows="3"><?= htmlspecialchars($selected_question['additional_prompt'] ?? '') ?></textarea>
-                                            <small class="form-text text-muted">You can write additional evaluation instructions specific to this question here.</small>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="edit_attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
-                                            <input type="number" class="form-control" id="edit_attempt_limit" name="attempt_limit" min="1" value="<?= htmlspecialchars($selected_question['attempt_limit'] ?? '') ?>">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="edit_llm_model">LLM Model:</label>
-                                            <select class="form-control" id="edit_llm_model" name="llm_model">
-                                                <option value="gemini" <?= ($selected_question['llm_model'] ?? 'gemini') === 'gemini' ? 'selected' : '' ?>>Gemini</option>
-                                                <option value="openai" <?= ($selected_question['llm_model'] ?? '') === 'openai' ? 'selected' : '' ?>>OpenAI (GPT-4)</option>
-                                            </select>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">Update Question</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                        <?php include 'modals/evaluation_criteria_modal.php'; ?>
+                        <?php include 'modals/edit_question_modal.php'; ?>
+                        <?php include 'modals/delete_question_modal.php'; ?>
+                        <?php include 'modals/delete_all_evaluations_modal.php'; ?>
 
                     <?php if (count($responses) > 0): ?>
                         <div class="card">
@@ -395,102 +326,7 @@ if ($LAUNCH->user->instructor) {
         </div>
     </div>
 
-    <!-- Create Question Modal -->
-    <div class="modal fade" id="createQuestionModal" tabindex="-1" role="dialog" aria-labelledby="createQuestionModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="createQuestionModalLabel">Create Question</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <form method="post">
-                        <div class="form-group">
-                            <label for="title">Title:</label>
-                            <input type="text" class="form-control" id="title" name="title" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="question">Question:</label>
-                            <textarea class="form-control" id="question" name="question" rows="3" required></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="prompt">Rubric:</label>
-                            <textarea class="form-control" id="prompt" name="prompt" rows="5" required></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="additional_prompt">Additional Evaluation Instructions:</label>
-                            <textarea class="form-control" id="additional_prompt" name="additional_prompt" rows="3"></textarea>
-                            <small class="form-text text-muted">You can write additional evaluation instructions specific to this question here.</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="attempt_limit">Maximum Attempts (leave empty for unlimited):</label>
-                            <input type="number" class="form-control" id="attempt_limit" name="attempt_limit" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label for="llm_model">LLM Model:</label>
-                            <select class="form-control" id="llm_model" name="llm_model">
-                                <option value="gemini">Gemini</option>
-                                <option value="openai">OpenAI (GPT-4)</option>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Save Question</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete All Evaluations Modal -->
-    <div class="modal fade" id="deleteAllEvaluationsModal" tabindex="-1" role="dialog" aria-labelledby="deleteAllEvaluationsModalLabel" aria-hidden="true">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="deleteAllEvaluationsModalLabel">Delete All Evaluations</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to delete all evaluations for this question? This action cannot be undone.</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                    <form method="post" style="display: inline;">
-                        <input type="hidden" name="delete_all_evaluations" value="1">
-                        <button type="submit" class="btn btn-warning">Delete All Evaluations</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Question Modal -->
-    <div class="modal fade" id="deleteQuestionModal" tabindex="-1" role="dialog" aria-labelledby="deleteQuestionModalLabel" aria-hidden="true">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="deleteQuestionModalLabel">Delete Question</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to delete this question? This action cannot be undone.</p>
-                    <p class="text-danger">Warning: All student responses and evaluations for this question will also be deleted.</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                    <form method="post" style="display: inline;">
-                        <input type="hidden" name="question_id" value="<?= $selected_question['question_id'] ?>">
-                        <input type="hidden" name="delete_question" value="1">
-                        <button type="submit" class="btn btn-danger">Delete Question</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
+    <?php include 'modals/create_question_modal.php'; ?>
 
     <?php
     SettingsForm::start();
@@ -587,31 +423,7 @@ if ($LAUNCH->user->instructor) {
                         </div>
                     </div>
 
-                    <!-- Evaluation Criteria Modal -->
-                    <div class="modal fade" id="evaluationCriteriaModal" tabindex="-1" role="dialog" aria-labelledby="evaluationCriteriaModalLabel" aria-hidden="true">
-                        <div class="modal-dialog modal-lg" role="document">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title" id="evaluationCriteriaModalLabel">Evaluation Criteria</h5>
-                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                        <span aria-hidden="true">&times;</span>
-                                    </button>
-                                </div>
-                                <div class="modal-body">
-                                    <div class="markdown-content">
-                                        <?php 
-                                            $cleanPrompt = strip_tags($selected_question['prompt']);
-                                            $cleanPrompt = implode("\n", array_map('trim', explode("\n", $cleanPrompt)));
-                                            echo $parsedown->text($cleanPrompt); 
-                                        ?>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <?php include 'modals/evaluation_criteria_modal.php'; ?>
 
                     <?php
                     $userResponses = array_filter($responses ?? [], function($r) use ($LAUNCH) {
