@@ -1,18 +1,20 @@
 <?php
 require_once "../config.php";
 require_once "lib/DbHelper.php";
+require_once "functions/auth_functions.php";
+require_once "functions/export_functions.php";
 
 use \Tsugi\Core\LTIX;
 use \LLMRater\DbHelper;
+use \LLMRater\Functions\Auth;
+use \LLMRater\Functions\Export;
 
 // Set memory limit for large exports
 ini_set('memory_limit', '256M');
 
-// Require instructor role
+// Initialize and validate
 $LAUNCH = LTIX::requireData();
-if (!$LAUNCH->user->instructor) {
-    die('Instructor role required');
-}
+Auth::requireInstructor($LAUNCH);
 
 // Initialize database helper
 $db = new DbHelper($PDOX, $CFG->dbprefix);
@@ -36,73 +38,25 @@ try {
         throw new Exception('No data available for export');
     }
 
-    // Generate filename with sanitized question title
-    $safeTitle = preg_replace('/[^a-z0-9]+/i', '_', $question['title']);
-    $filename = sprintf(
-        'responses_%s_%s_%s.csv',
-        $safeTitle,
-        $question_id,
-        date('Y-m-d_His')
-    );
-
-    // Set headers for CSV download
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-    header('Pragma: public');
+    // Generate filename and set headers
+    $filename = Export::generateExportFilename($question);
+    Export::setExportHeaders($filename);
 
     // Start output buffering for large files
     ob_start();
-
-    // Create output handle
     $output = fopen('php://output', 'w');
-
-    // Add UTF-8 BOM for Excel
-    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-
-    // Write CSV header
-    fputcsv($output, [
-        'Student',
-        'Email',
-        'Question',
-        'Answer',
-        'Submitted At',
-        'Evaluation',
-        'Evaluated At'
-    ]);
-
-    // Write data rows with chunking for memory efficiency
-    $chunkSize = 100;
-    $processed = 0;
-    $total = count($responses);
-
-    while ($processed < $total) {
-        $chunk = array_slice($responses, $processed, $chunkSize);
-        
-        foreach ($chunk as $response) {
-            fputcsv($output, [
-                $response['displayname'] ?? 'Unknown',
-                $response['email'] ?? '',
-                strip_tags($response['question']), // Remove HTML tags from question
-                $response['answer'],
-                $response['submitted_at'],
-                $response['evaluation_text'] ?? '',
-                $response['evaluated_at'] ?? ''
-            ]);
-        }
-
-        $processed += count($chunk);
-        ob_flush(); // Flush output buffer
-        flush(); // Flush system buffer
-    }
+    
+    // Export data
+    Export::exportToCSV($responses, $question, $output);
 
     fclose($output);
     ob_end_flush();
     exit();
 
 } catch (Exception $e) {
-    $_SESSION['error'] = $e->getMessage();
-    header('Location: ' . addSession('index.php' . 
-        ($question_id ? '?question_id=' . $question_id : '')));
-    exit();
+    Auth::redirectWithMessage(
+        'index.php' . ($question_id ? '?question_id=' . $question_id : ''),
+        $e->getMessage(),
+        'error'
+    );
 }

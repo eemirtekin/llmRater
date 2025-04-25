@@ -4,6 +4,8 @@ require_once "lib/DbHelper.php";
 require_once "lib/GeminiRater.php";
 require_once "lib/OpenAIRater.php";
 require_once "lib/Parsedown.php";  // Include Parsedown
+require_once "functions/ui_functions.php";
+require_once "functions/auth_functions.php";
 
 use \Tsugi\Util\U;
 use \Tsugi\Core\LTIX;
@@ -12,15 +14,16 @@ use \Tsugi\UI\SettingsForm;
 use \LLMRater\DbHelper;
 use \LLMRater\GeminiRater;
 use \LLMRater\OpenAIRater;
+use \LLMRater\Functions\UI;
+use \LLMRater\Functions\Auth;
 
 $LAUNCH = LTIX::requireData();
 $db = new DbHelper($PDOX, $CFG->dbprefix);
 $db->createTables();
+$parsedown = new Parsedown();
 
 if (SettingsForm::handleSettingsPost()) {
-    $_SESSION['success'] = 'Settings updated';
-    header('Location: ' . addSession('index.php'));
-    return;
+    Auth::redirectWithMessage('index.php', 'Settings updated');
 }
 
 // Handle form submissions
@@ -133,63 +136,16 @@ if (isset($_GET['question_id'])) {
     }
 }
 
-// Create Parsedown object
-$parsedown = new Parsedown();
-
 $OUTPUT->header();
 ?>
 <link rel="stylesheet" href="css/custom.css?v=<?php echo filemtime(__DIR__ . '/css/custom.css'); ?>">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-<script>
-// LTI iframe resize handler
-function sendLTIFrameHeight() {
-    try {
-        // Get the height of the document
-        const height = Math.max(
-            document.documentElement.clientHeight,
-            document.documentElement.scrollHeight,
-            document.documentElement.offsetHeight
-        );
-        
-        // Send message to parent window
-        if (window.parent && window.parent !== window) {
-            const message = {
-                subject: 'lti.frameResize',
-                height: height
-            };
-            window.parent.postMessage(JSON.stringify(message), '*');
-        }
-    } catch (e) {
-        console.error('Error sending frame height:', e);
-    }
-}
-
-// Call on page load and after any dynamic content changes
-window.addEventListener('load', sendLTIFrameHeight);
-window.addEventListener('resize', sendLTIFrameHeight);
-
-// Call when modals are shown/hidden
-document.addEventListener('DOMContentLoaded', function() {
-    const modals = document.querySelectorAll('.modal');
-    modals.forEach(modal => {
-        modal.addEventListener('shown.bs.modal', sendLTIFrameHeight);
-        modal.addEventListener('hidden.bs.modal', sendLTIFrameHeight);
-    });
-});
-
-// Periodic check for dynamic content changes
-setInterval(sendLTIFrameHeight, 1000);
-</script>
 <?php
+UI::renderFrameResizeScript();
 $OUTPUT->bodyStart();
 
 $menu = new \Tsugi\UI\MenuSet();
-$menu->addLeft('Home', 'index.php');
-
-if ($LAUNCH->user->instructor) {
-    $menu->addRight('Create Question', '#', false, 'data-toggle="modal" data-target="#createQuestionModal"');
-    $menu->addRight('Settings', '#', false, SettingsForm::attr());
-}
+UI::renderMenu($LAUNCH, $menu);
 
 $OUTPUT->topNav($menu);
 $OUTPUT->flashMessages();

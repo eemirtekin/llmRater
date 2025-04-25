@@ -4,34 +4,32 @@ require_once "lib/DbHelper.php";
 require_once "lib/GeminiRater.php";
 require_once "lib/OpenAIRater.php";
 require_once "lib/Parsedown.php";
+require_once "functions/ui_functions.php";
+require_once "functions/auth_functions.php";
 
 use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Settings;
 use \LLMRater\DbHelper;
 use \LLMRater\GeminiRater;
 use \LLMRater\OpenAIRater;
+use \LLMRater\Functions\UI;
+use \LLMRater\Functions\Auth;
 
 // Initialize $responses as empty array
 $responses = [];
 $LAUNCH = LTIX::requireData();
-if (!$LAUNCH->user->instructor) {
-    die('Instructor role required');
-}
+Auth::requireInstructor($LAUNCH);
 
 $response_id = filter_input(INPUT_GET, 'response_id', FILTER_VALIDATE_INT);
 if (!$response_id) {
-    $_SESSION['error'] = 'Invalid response ID';
-    header('Location: ' . addSession('index.php'));
-    return;
+    Auth::redirectWithMessage('index.php', 'Invalid response ID', 'error');
 }
 
 // Initialize database helper and get response details
 $db = new DbHelper($PDOX, $CFG->dbprefix);
 $response = $db->getResponseDetails($response_id);
 if (!$response) {
-    $_SESSION['error'] = 'Response not found';
-    header('Location: ' . addSession('index.php'));
-    return;
+    Auth::redirectWithMessage('index.php', 'Response not found', 'error');
 }
 
 // Get responses for the current question
@@ -41,40 +39,36 @@ $responses = $db->getResponses($response['question_id']);
 $adjacent = $db->getAdjacentResponses($response_id);
 
 // Handle evaluation request
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['evaluate'])) {
-        try {
-            $question = $db->getQuestionById($response['question_id']);
-            $llmModel = $question['llm_model'] ?? 'gemini';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['evaluate'])) {
+    try {
+        $question = $db->getQuestionById($response['question_id']);
+        $llmModel = $question['llm_model'] ?? 'gemini';
 
-            if ($llmModel === 'openai') {
-                $apiKey = Settings::linkGet('openai_api_key');
-                if (!$apiKey) {
-                    throw new Exception('OpenAI API key not configured');
-                }
-                $rater = new OpenAIRater($apiKey);
-            } else {
-                $apiKey = Settings::linkGet('gemini_api_key');
-                if (!$apiKey) {
-                    throw new Exception('Gemini API key not configured');
-                }
-                $rater = new GeminiRater($apiKey);
+        if ($llmModel === 'openai') {
+            $apiKey = Settings::linkGet('openai_api_key');
+            if (!$apiKey) {
+                throw new Exception('OpenAI API key not configured');
             }
-
-            $evaluation = $rater->evaluate(
-                $response['question'],
-                $response['answer'],
-                $response['prompt'],
-                $response['additional_prompt'] ?? null
-            );
-
-            $db->saveEvaluation($response_id, $evaluation['raw_response']);
-            $_SESSION['success'] = 'Evaluation completed successfully';
-        } catch (Exception $e) {
-            $_SESSION['error'] = 'Evaluation failed: ' . $e->getMessage();
+            $rater = new OpenAIRater($apiKey);
+        } else {
+            $apiKey = Settings::linkGet('gemini_api_key');
+            if (!$apiKey) {
+                throw new Exception('Gemini API key not configured');
+            }
+            $rater = new GeminiRater($apiKey);
         }
-        header('Location: ' . addSession('view.php?response_id=' . $response_id));
-        return;
+
+        $evaluation = $rater->evaluate(
+            $response['question'],
+            $response['answer'],
+            $response['prompt'],
+            $response['additional_prompt'] ?? null
+        );
+
+        $db->saveEvaluation($response_id, $evaluation['raw_response']);
+        Auth::redirectWithMessage('view.php?response_id=' . $response_id, 'Evaluation completed successfully');
+    } catch (Exception $e) {
+        Auth::redirectWithMessage('view.php?response_id=' . $response_id, 'Evaluation failed: ' . $e->getMessage(), 'error');
     }
 }
 
@@ -90,6 +84,8 @@ $OUTPUT->bodyStart();
 
 $menu = new \Tsugi\UI\MenuSet();
 $menu->addLeft('Back to List', 'index.php');
+UI::renderMenu($LAUNCH, $menu);
+
 $OUTPUT->topNav($menu);
 $OUTPUT->flashMessages();
 ?>
@@ -109,13 +105,13 @@ $OUTPUT->flashMessages();
                 </div>
                 <h5>Question:</h5>
                 <div class="markdown-content">
-                    <?= $parsedown->text(trim(strip_tags($response['question']))) ?>
+                    <?= UI::formatMarkdown($response['question'], $parsedown) ?>
                 </div>
             </div>
 
             <h5>Evaluation Criteria:</h5>
             <div class="markdown-content mb-4">
-                <?= $parsedown->text(trim(strip_tags($response['prompt']))) ?>
+                <?= UI::formatMarkdown($response['prompt'], $parsedown) ?>
             </div>
 
             <h5>Answer:</h5>
