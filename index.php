@@ -241,27 +241,39 @@ if ($LAUNCH->user->instructor) {
                                 ?>
                             </div>
                             
-                            <div class="btn-group mb-4">
+                            <div class="d-flex align-items-center flex-wrap gap-2 mb-4">
                                 <button class="btn btn-primary" data-toggle="modal" data-target="#editQuestionModal">
-                                    Edit Question
+                                    <i class="fas fa-pencil-alt"></i> Edit
                                 </button>
+                                
                                 <?php if (count($responses) > 0): ?>
-                                    <a href="export.php?question_id=<?= $selected_question['question_id'] ?>" class="btn btn-secondary">
-                                        Export Responses
-                                    </a>
                                     <form method="post" style="display: inline;">
                                         <input type="hidden" name="evaluate_all" value="1">
-                                        <button type="submit" class="btn btn-success">
-                                            Evaluate All Responses
+                                        <button type="submit" class="btn btn-warning">
+                                            <i class="fas fa-magic"></i> Evaluate
                                         </button>
                                     </form>
-                                    <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#deleteAllEvaluationsModal">
-                                        Delete All Evaluations
-                                    </button>
+
+                                    <a href="export.php?question_id=<?= $selected_question['question_id'] ?>" class="btn btn-success">
+                                        <i class="fas fa-file-csv"></i> Export
+                                    </a>
                                 <?php endif; ?>
-                                <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteQuestionModal">
-                                    Delete Question
-                                </button>
+
+                                <div class="dropdown">
+                                    <button class="btn btn-danger dropdown-toggle" type="button" id="deleteMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                    <div class="dropdown-menu" aria-labelledby="deleteMenuButton">
+                                        <button type="button" class="dropdown-item text-danger" data-toggle="modal" data-target="#deleteQuestionModal">
+                                            Question
+                                        </button>
+                                        <?php if (count($responses) > 0): ?>
+                                            <button type="button" class="dropdown-item text-danger" data-toggle="modal" data-target="#deleteAllEvaluationsModal">
+                                                Evaluations
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mt-4">
@@ -404,7 +416,7 @@ if ($LAUNCH->user->instructor) {
                             <textarea class="form-control" id="question" name="question" rows="3" required></textarea>
                         </div>
                         <div class="form-group">
-                            <label for="prompt">Evaluation Prompt (Rubric for LLM):</label>
+                            <label for="prompt">Rubric:</label>
                             <textarea class="form-control" id="prompt" name="prompt" rows="5" required></textarea>
                         </div>
                         <div class="form-group">
