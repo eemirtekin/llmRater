@@ -88,25 +88,25 @@ llmRater/
 ├── css/
 │   └── custom.css           # Custom styling
 ├── functions/
-│   ├── auth.php           # Kimlik doğrulama işlevleri
-│   ├── export.php         # Dışa aktarma işlevleri
-│   └── ui.php            # Kullanıcı arayüzü işlevleri
+│   ├── auth.php            # Authentication and authorization functions
+│   ├── export.php          # Export functionality handlers
+│   └── ui.php              # User interface helper functions
 ├── lib/
-│   ├── db.php            # Veritabanı işlemleri
-│   ├── gemini.php        # Gemini API entegrasyonu
-│   ├── openai.php        # OpenAI API entegrasyonu
-│   └── parsedown.php     # Markdown işleme (3. parti)
+│   ├── db.php              # Database operations and table management
+│   ├── gemini.php          # Google Gemini API integration
+│   ├── openai.php          # OpenAI API integration
+│   └── parsedown.php       # Markdown processing (3rd party)
 ├── modals/
-│   ├── question.create.php      # Soru oluşturma formu
-│   ├── question.edit.php       # Soru düzenleme formu
-│   ├── question.delete.php     # Soru silme onayı
-│   ├── evaluations.delete.php  # Değerlendirmeleri silme onayı
-│   └── rubric.view.php        # Değerlendirme kriterlerini görüntüleme
+│   ├── question.create.php      # Question creation form modal
+│   ├── question.edit.php        # Question editing form modal
+│   ├── question.delete.php      # Question deletion confirmation modal
+│   ├── evaluations.delete.php   # Evaluation deletion confirmation modal
+│   └── rubric.view.php         # Rubric viewing modal
 ├── export.php              # Export functionality
 ├── index.php              # Main application file
 ├── register.php           # LTI registration
-├── tsugi.php             # Tsugi integration
-└── view.php              # Response viewing
+├── tsugi.php             # Tsugi framework integration
+└── view.php              # Response viewing interface
 ```
 
 ## Security Features

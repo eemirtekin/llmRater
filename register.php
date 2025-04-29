@@ -9,48 +9,22 @@ $REGISTER_LTI2 = array(
         "launch",
         "launch_grade"
     ),
-    "privacy_level" => "name_only",
+    "privacy_level" => "public",
     "license" => "Apache",
     "languages" => array(
-        "English",
-        "Turkish"
-    ),
-    "analytics" => array(
-        "enabled" => true,
-        "tracking" => array(
-            "student_submissions",
-            "evaluation_metrics",
-            "instructor_feedback"
-        )
-    ),
-    "features" => array(
-        "markdown_support",
-        "batch_evaluation",
-        "custom_rubrics",
-        "export_functionality",
-        "attempt_limiting"
-    ),
-    "requirements" => array(
-        "gemini_api_key" => true,
-        "php_version" => ">=7.4"
+        "English"
     ),
     "source_url" => "https://github.com/tsugitools/llmrater",
     "issues_url" => "https://github.com/tsugitools/llmrater/issues",
     "documentation_url" => "https://github.com/tsugitools/llmrater/wiki",
     "placements" => array(
+        /*
         "course_navigation",
         "homework_submission",
         "editor_button"
+        */
     ),
     "screen_shots" => array(
-        "store/screen-01.png",
-        "store/screen-02.png",
-        "store/screen-03.png"
-    ),
-    // Improved support for course copy
-    "value_added" => array(
-        "course_copy_support" => true,
-        "rubric_association" => true,
-        "gradebook_integration" => true
+        "img/screen-01.png"
     )
 );
