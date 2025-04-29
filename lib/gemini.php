@@ -1,7 +1,7 @@
 <?php
 namespace LLMRater;
 
-class GeminiRater {
+class Gemini {
     private $apiKey;
     private $model = 'gemini-2.0-flash';
     private $baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';

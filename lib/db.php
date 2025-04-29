@@ -1,7 +1,7 @@
 <?php
 namespace LLMRater;
 
-class DbHelper {
+class Db {
     private $PDOX;
     private $p; // Database prefix
 

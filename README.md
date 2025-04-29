@@ -88,20 +88,20 @@ llmRater/
 ├── css/
 │   └── custom.css           # Custom styling
 ├── functions/
-│   ├── auth_functions.php   # Authentication functions
-│   ├── export_functions.php # Export functionality
-│   └── ui_functions.php     # UI helper functions
+│   ├── auth.php           # Kimlik doğrulama işlevleri
+│   ├── export.php         # Dışa aktarma işlevleri
+│   └── ui.php            # Kullanıcı arayüzü işlevleri
 ├── lib/
-│   ├── DbHelper.php        # Database operations
-│   ├── GeminiRater.php     # Gemini API integration
-│   ├── OpenAIRater.php     # OpenAI API integration
-│   └── Parsedown.php       # Markdown parser
+│   ├── db.php            # Veritabanı işlemleri
+│   ├── gemini.php        # Gemini API entegrasyonu
+│   ├── openai.php        # OpenAI API entegrasyonu
+│   └── parsedown.php     # Markdown işleme (3. parti)
 ├── modals/
-│   ├── create_question_modal.php
-│   ├── delete_all_evaluations_modal.php
-│   ├── delete_question_modal.php
-│   ├── edit_question_modal.php
-│   └── evaluation_criteria_modal.php
+│   ├── question.create.php      # Soru oluşturma formu
+│   ├── question.edit.php       # Soru düzenleme formu
+│   ├── question.delete.php     # Soru silme onayı
+│   ├── evaluations.delete.php  # Değerlendirmeleri silme onayı
+│   └── rubric.view.php        # Değerlendirme kriterlerini görüntüleme
 ├── export.php              # Export functionality
 ├── index.php              # Main application file
 ├── register.php           # LTI registration

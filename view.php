@@ -1,17 +1,17 @@
 <?php
 require_once "../config.php";
-require_once "lib/DbHelper.php";
-require_once "lib/GeminiRater.php";
-require_once "lib/OpenAIRater.php";
-require_once "lib/Parsedown.php";
-require_once "functions/ui_functions.php";
-require_once "functions/auth_functions.php";
+require_once "lib/db.php";
+require_once "lib/gemini.php";
+require_once "lib/openai.php";
+require_once "lib/parsedown.php";
+require_once "functions/ui.php";
+require_once "functions/auth.php";
 
 use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Settings;
-use \LLMRater\DbHelper;
-use \LLMRater\GeminiRater;
-use \LLMRater\OpenAIRater;
+use \LLMRater\Db;
+use \LLMRater\Gemini;
+use \LLMRater\OpenAI;
 use \LLMRater\Functions\UI;
 use \LLMRater\Functions\Auth;
 
@@ -26,7 +26,7 @@ if (!$response_id) {
 }
 
 // Initialize database helper and get response details
-$db = new DbHelper($PDOX, $CFG->dbprefix);
+$db = new Db($PDOX, $CFG->dbprefix);
 $response = $db->getResponseDetails($response_id);
 if (!$response) {
     Auth::redirectWithMessage('index.php', 'Response not found', 'error');
@@ -49,13 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['evaluate'])) {
             if (!$apiKey) {
                 throw new Exception('OpenAI API key not configured');
             }
-            $rater = new OpenAIRater($apiKey);
+            $rater = new OpenAI($apiKey);
         } else {
             $apiKey = Settings::linkGet('gemini_api_key');
             if (!$apiKey) {
                 throw new Exception('Gemini API key not configured');
             }
-            $rater = new GeminiRater($apiKey);
+            $rater = new Gemini($apiKey);
         }
 
         $evaluation = $rater->evaluate(
@@ -175,6 +175,8 @@ $OUTPUT->flashMessages();
         <?php endif; ?>
     </div>
 </div>
+
+<?php include 'modals/rubric.view.php'; ?>
 
 <?php
 $OUTPUT->footerStart();

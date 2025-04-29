@@ -1,24 +1,24 @@
 <?php
 require_once "../config.php";
-require_once "lib/DbHelper.php";
-require_once "lib/GeminiRater.php";
-require_once "lib/OpenAIRater.php";
-require_once "lib/Parsedown.php";  // Include Parsedown
-require_once "functions/ui_functions.php";
-require_once "functions/auth_functions.php";
+require_once "lib/db.php";
+require_once "lib/gemini.php";
+require_once "lib/openai.php";
+require_once "lib/parsedown.php";
+require_once "functions/ui.php";
+require_once "functions/auth.php";
 
 use \Tsugi\Util\U;
 use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Settings;
 use \Tsugi\UI\SettingsForm;
-use \LLMRater\DbHelper;
-use \LLMRater\GeminiRater;
-use \LLMRater\OpenAIRater;
+use \LLMRater\Db;
+use \LLMRater\Gemini;
+use \LLMRater\OpenAI;
 use \LLMRater\Functions\UI;
 use \LLMRater\Functions\Auth;
 
 $LAUNCH = LTIX::requireData();
-$db = new DbHelper($PDOX, $CFG->dbprefix);
+$db = new Db($PDOX, $CFG->dbprefix);
 $db->createTables();
 $parsedown = new Parsedown();
 
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
                     return;
                 }
-                $rater = new OpenAIRater($apiKey);
+                $rater = new OpenAI($apiKey);
             } else {
                 $apiKey = Settings::linkGet('gemini_api_key');
                 if (!$apiKey) {
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
                     return;
                 }
-                $rater = new GeminiRater($apiKey);
+                $rater = new Gemini($apiKey);
             }
 
             // Get all unevaluated responses
@@ -235,16 +235,16 @@ if ($LAUNCH->user->instructor) {
 
                             <div class="mt-4">
                                 <h4 style="display: inline-block; margin-right: 10px;">Evaluation Criteria:</h4>
-                                <button class="btn btn-link p-0" data-toggle="modal" data-target="#evaluationCriteriaModal" style="vertical-align: baseline;">
+                                <button class="btn btn-link p-0" data-toggle="modal" data-target="#rubricViewModal" style="vertical-align: baseline;">
                                     <i class="fas fa-table"></i>
                                 </button>
                             </div>
                         </div>
 
-                        <?php include 'modals/evaluation_criteria_modal.php'; ?>
-                        <?php include 'modals/edit_question_modal.php'; ?>
-                        <?php include 'modals/delete_question_modal.php'; ?>
-                        <?php include 'modals/delete_all_evaluations_modal.php'; ?>
+                        <?php include 'modals/rubric.view.php'; ?>
+                        <?php include 'modals/question.edit.php'; ?>
+                        <?php include 'modals/question.delete.php'; ?>
+                        <?php include 'modals/evaluations.delete.php'; ?>
 
                     <?php if (count($responses) > 0): ?>
                         <div class="card">
@@ -305,7 +305,11 @@ if ($LAUNCH->user->instructor) {
         </div>
     </div>
 
-    <?php include 'modals/create_question_modal.php'; ?>
+    <?php include 'modals/question.create.php'; ?>
+    <?php include 'modals/question.edit.php'; ?>
+    <?php include 'modals/question.delete.php'; ?>
+    <?php include 'modals/evaluations.delete.php'; ?>
+    <?php include 'modals/rubric.view.php'; ?>
 
     <?php
     SettingsForm::start();
@@ -362,7 +366,7 @@ if ($LAUNCH->user->instructor) {
 
                             <div class="mt-4">
                                 <h4 style="display: inline-block; margin-right: 10px;">Evaluation Criteria:</h4>
-                                <button class="btn btn-link p-0" data-toggle="modal" data-target="#evaluationCriteriaModal" style="vertical-align: baseline;">
+                                <button class="btn btn-link p-0" data-toggle="modal" data-target="#rubricViewModal" style="vertical-align: baseline;">
                                     <i class="fas fa-table"></i>
                                 </button>
                             </div>
@@ -402,7 +406,7 @@ if ($LAUNCH->user->instructor) {
                         </div>
                     </div>
 
-                    <?php include 'modals/evaluation_criteria_modal.php'; ?>
+                    <?php include 'modals/rubric.view.php'; ?>
 
                     <?php
                     $userResponses = array_filter($responses ?? [], function($r) use ($LAUNCH) {

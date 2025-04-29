@@ -1,7 +1,7 @@
 <?php
 namespace LLMRater;
 
-class OpenAIRater {
+class OpenAI {
     private $apiKey;
     private $model = 'gpt-4o-mini';
     private $baseUrl = 'https://api.openai.com/v1';

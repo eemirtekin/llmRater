@@ -1,11 +1,11 @@
 <?php
 require_once "../config.php";
-require_once "lib/DbHelper.php";
-require_once "functions/auth_functions.php";
-require_once "functions/export_functions.php";
+require_once "lib/db.php";
+require_once "functions/auth.php";
+require_once "functions/export.php";
 
 use \Tsugi\Core\LTIX;
-use \LLMRater\DbHelper;
+use \LLMRater\Db;
 use \LLMRater\Functions\Auth;
 use \LLMRater\Functions\Export;
 
@@ -17,7 +17,7 @@ $LAUNCH = LTIX::requireData();
 Auth::requireInstructor($LAUNCH);
 
 // Initialize database helper
-$db = new DbHelper($PDOX, $CFG->dbprefix);
+$db = new Db($PDOX, $CFG->dbprefix);
 
 try {
     // Get and validate question ID
