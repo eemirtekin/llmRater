@@ -405,4 +405,9 @@ class DbHelper {
         
         return $this->PDOX->allRowsDie($sql, array(':qid' => $questionId));
     }
+
+    public function deleteResponse($responseId) {
+        $sql = "DELETE FROM {$this->p}llm_responses WHERE response_id = :rid";
+        return $this->PDOX->queryDie($sql, array(':rid' => $responseId));
+    }
 }

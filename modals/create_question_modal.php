@@ -21,11 +21,13 @@
                         <textarea class="form-control" id="question" name="question" rows="3" required></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="prompt">Rubric:</label>
+                        <label for="prompt">Rubric: </label>
                         <textarea class="form-control" id="prompt" name="prompt" rows="5" required></textarea>
+                        <small class="form-text text-muted">Must be markdown format to best evaluation.</small>
+
                     </div>
                     <div class="form-group">
-                        <label for="additional_prompt">Additional Evaluation Instructions:</label>
+                        <label for="additional_prompt">Instructions:</label>
                         <textarea class="form-control" id="additional_prompt" name="additional_prompt" rows="3"></textarea>
                         <small class="form-text text-muted">You can write additional evaluation instructions specific to this question here.</small>
                     </div>

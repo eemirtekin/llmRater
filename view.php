@@ -127,15 +127,15 @@ $OUTPUT->flashMessages();
                         <small class="text-muted mt-2 d-block">Evaluated on: <?= htmlspecialchars($response['evaluated_at']) ?></small>
                     <?php endif; ?>
                     <form method="post" class="mt-2">
-                        <button type="submit" name="evaluate" value="1" class="btn btn-sm btn-outline-secondary">
-                            Re-evaluate
+                        <button type="submit" name="evaluate" value="1" class="btn btn-sm btn-outline-secondary" title="Re-evaluate">
+                            <i class="fas fa-sync-alt"></i>
                         </button>
                     </form>
                 </div>
             <?php else: ?>
                 <form method="post">
-                    <button type="submit" name="evaluate" value="1" class="btn btn-sm btn-primary">
-                        Evaluate Response
+                    <button type="submit" name="evaluate" value="1" class="btn btn-sm btn-primary" title="Evaluate Response">
+                        <i class="fas fa-magic"></i>
                     </button>
                 </form>
             <?php endif; ?>

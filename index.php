@@ -97,6 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['success'] = 'Question updated';
             header('Location: ' . addSession('index.php?question_id=' . $_POST['question_id']));
             return;
+        } else if (isset($_POST['delete_response']) && isset($_POST['response_id'])) {
+            $db->deleteResponse($_POST['response_id']);
+            $_SESSION['success'] = 'Response deleted';
+            header('Location: ' . addSession('index.php?question_id=' . $_GET['question_id']));
+            return;
         }
     } else {
         if (isset($_POST['answer']) && isset($_POST['question_id'])) {
@@ -141,7 +146,6 @@ $OUTPUT->header();
 <link rel="stylesheet" href="css/custom.css?v=<?php echo filemtime(__DIR__ . '/css/custom.css'); ?>">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 <?php
-UI::renderFrameResizeScript();
 $OUTPUT->bodyStart();
 
 $menu = new \Tsugi\UI\MenuSet();
@@ -181,9 +185,6 @@ if ($LAUNCH->user->instructor) {
             <div class="col-md-8">
                 <?php if ($selected_question): ?>
                     <div class="card mb-4">
-                        <div class="card-header">
-                            <h3 class="mb-0">Question Details</h3>
-                        </div>
                         <div class="card-body">
                             <h4><?= htmlspecialchars($selected_question['title']) ?></h4>
                             <div class="markdown-content mb-4">
@@ -250,12 +251,22 @@ if ($LAUNCH->user->instructor) {
                             <div class="card-header">
                                 <h3 class="mb-0">Responses</h3>
                             </div>
+                            <div class="alert alert-info">
+                                <h5 class="mb-2">Available Actions:</h5>
+                                <ul class="mb-0">
+                                    <li><i class="fas fa-eye"></i> <strong>View</strong>: View detailed response and evaluation</li>
+                                    <li><i class="fas fa-pencil-alt"></i> <strong>Edit</strong>: Modify question details and evaluation criteria</li>
+                                    <li><i class="fas fa-magic"></i> <strong>Evaluate</strong>: Automatically evaluate all responses using AI</li>
+                                    <li><i class="fas fa-file-csv"></i> <strong>Export</strong>: Download all responses and evaluations as CSV</li>
+                                    <li><i class="fas fa-trash"></i> <strong>Delete</strong>: Remove question, responses or clear evaluations</li>
+                                </ul>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table">
                                     <thead>
                                         <tr>
                                             <th>Student</th>
-                                           
+                                            <th>Email</th>
                                             <th>Submitted</th>
                                             <th>Actions</th>
                                         </tr>
@@ -264,9 +275,21 @@ if ($LAUNCH->user->instructor) {
                                         <?php foreach ($responses as $response) : ?>
                                             <tr>
                                                 <td><?= htmlspecialchars($response['displayname'] ?? '') ?></td>
+                                                <td><?= htmlspecialchars($response['email'] ?? '') ?></td>
                                                 <td><?= htmlspecialchars($response['submitted_at'] ?? '') ?></td>
                                                 <td>
-                                                    <a href="view.php?response_id=<?= $response['response_id'] ?>" class="btn btn-sm btn-info">View</a>
+                                                    <div class="btn-group">
+                                                        <a href="view.php?response_id=<?= $response['response_id'] ?>" class="btn btn-sm btn-info" title="View">
+                                                            <i class="fas fa-eye"></i>
+                                                        </a>
+                                                        <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this response?');">
+                                                            <input type="hidden" name="delete_response" value="1">
+                                                            <input type="hidden" name="response_id" value="<?= $response['response_id'] ?>">
+                                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>

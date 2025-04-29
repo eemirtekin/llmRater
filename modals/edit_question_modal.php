@@ -22,11 +22,13 @@
                         <textarea class="form-control" id="edit_question" name="question" rows="3" required><?= htmlspecialchars($selected_question['question']) ?></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="edit_prompt">Evaluation Prompt (Rubric for LLM):</label>
+                        <label for="edit_prompt">Rubric:</label>
                         <textarea class="form-control" id="edit_prompt" name="prompt" rows="5" required><?= htmlspecialchars($selected_question['prompt']) ?></textarea>
+                        <small class="form-text text-muted">Must be markdown format to best evaluation.</small>
+
                     </div>
                     <div class="form-group">
-                        <label for="edit_additional_prompt">Additional Evaluation Instructions:</label>
+                        <label for="edit_additional_prompt">Instructions:</label>
                         <textarea class="form-control" id="edit_additional_prompt" name="additional_prompt" rows="3"><?= htmlspecialchars($selected_question['additional_prompt'] ?? '') ?></textarea>
                         <small class="form-text text-muted">You can write additional evaluation instructions specific to this question here.</small>
                     </div>
